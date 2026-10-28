@@ -1,0 +1,22 @@
+name: Release
+
+# release-please lit les commits conventionnels (feat:, fix:…) et tient à jour une PR "chore: release".
+# Quand tu merges cette PR : le numéro de version augmente, CHANGELOG.md est mis à jour et une release GitHub est créée.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          # "simple" fonctionne pour toutes les stacks (version dans version.txt).
+          # Pour Node, Python, Go… tu peux passer à "node", "python", "go" : voir la doc de release-please.
+          release-type: simple

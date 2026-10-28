@@ -1,0 +1,38 @@
+name: ✨ Fonctionnalité (user story)
+description: Une fonctionnalité livrable en une PR
+labels: ["type: feature", "status: triage"]
+body:
+  - type: textarea
+    id: story
+    attributes:
+      label: User story
+      value: |
+        En tant que …
+        je veux …
+        afin de …
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Critères d'acceptation
+      description: Testables, au format Given / When / Then
+      value: |
+        - [ ] Étant donné …, quand …, alors …
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Hors périmètre
+      description: Ce que cette issue ne couvre pas
+  - type: dropdown
+    id: size
+    attributes:
+      label: Taille estimée
+      options: ["XS (< 1 h)", "S (demi-journée)", "M (1–2 jours)", "L (à redécouper)"]
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes, maquettes, liens

@@ -1,0 +1,48 @@
+name: Deploy
+
+# Déploiement automatique après chaque merge sur main, une fois la CI verte.
+# Choisis UNE cible ci-dessous et supprime les autres (l'agent `architect` le fait au /kickoff).
+#
+# Souvent, le plus simple est de ne pas utiliser ce fichier : Vercel, Netlify et Cloudflare Pages
+# peuvent se connecter directement au repo GitHub et déployer chaque push sur main
+# (avec en bonus un déploiement "preview" pour chaque PR). Dans ce cas, supprime ce fichier.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    env:
+      DEPLOY_HOOK_URL: ${{ secrets.DEPLOY_HOOK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Option A : service avec "deploy hook" (Render, Railway, Coolify…) ---
+      # Crée le secret DEPLOY_HOOK_URL dans Settings → Environments → production.
+      - name: Trigger deploy hook
+        if: env.DEPLOY_HOOK_URL != ''
+        run: curl -fsS -X POST "$DEPLOY_HOOK_URL"
+
+      - name: Nothing to deploy yet
+        if: env.DEPLOY_HOOK_URL == ''
+        run: echo "Aucune cible de déploiement configurée (voir les commentaires de deploy.yml)."
+
+      # --- Option B : commande de déploiement du projet ---
+      # Décommente et remplis la cible `deploy` du Makefile (ex. wrangler, flyctl, firebase…).
+      # - name: Deploy
+      #   env:
+      #     DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+      #   run: make install build deploy

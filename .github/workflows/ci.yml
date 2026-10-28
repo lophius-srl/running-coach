@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    # Ce nom de job ("checks") est le "status check" exigé par la règle de branche.
+    name: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Installation des outils : détectée automatiquement selon les fichiers du projet ---
+      - name: Setup Node
+        if: hashFiles('package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: ${{ hashFiles('pnpm-lock.yaml') != '' && 'pnpm' || 'npm' }}
+
+      - name: Setup pnpm
+        if: hashFiles('pnpm-lock.yaml') != ''
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Python
+        if: hashFiles('pyproject.toml', 'requirements*.txt') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup Go
+        if: hashFiles('go.mod') != ''
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Autres stacks (Flutter, Rust, Java…) : ajoute ici l'action "setup-*" correspondante.
+
+      # --- Les étapes qualité passent toutes par le Makefile ---
+      - name: Install
+        run: make install
+      - name: Lint
+        run: make lint
+      - name: Test
+        run: make test
+      - name: Build
+        run: make build

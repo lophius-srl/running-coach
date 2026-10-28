@@ -1,0 +1,17 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Claude Code (réglages personnels, non partagés)
+.claude/settings.local.json
+
+# Divers
+.DS_Store
+*.log
+node_modules/
+__pycache__/
+.venv/
+dist/
+build/
+coverage/

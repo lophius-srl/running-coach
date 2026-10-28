@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # Met à jour les actions GitHub utilisées par les workflows.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    labels: ["type: chore", "dependencies"]
+
+  # Décommente l'écosystème de ta stack (npm, pip, gomod, cargo, pub, gradle, docker…).
+  # - package-ecosystem: npm
+  #   directory: /
+  #   schedule:
+  #     interval: weekly
+  #   commit-message:
+  #     prefix: chore
+  #   labels: ["type: chore", "dependencies"]
+  #   groups:
+  #     minor-and-patch:
+  #       update-types: [minor, patch]

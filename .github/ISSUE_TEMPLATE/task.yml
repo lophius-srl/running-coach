@@ -1,0 +1,22 @@
+name: 🔧 Tâche technique
+description: Refactoring, outillage, dette technique, infra
+labels: ["type: chore", "status: triage"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Quoi
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Pourquoi (bénéfice concret)
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Terminé quand…
+      value: |
+        - [ ]
