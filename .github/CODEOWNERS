@@ -1,8 +1,8 @@
 # Remplace OWNER par ton nom d'utilisateur GitHub (le script setup-github.sh le fait pour toi).
 # Tu es automatiquement demandé en relecture sur chaque PR.
-*                   @OWNER
+*                   @lophius-srl
 
 # Les fichiers sensibles : toujours relus attentivement
-/.github/           @OWNER
-/.claude/           @OWNER
-/CLAUDE.md          @OWNER
+/.github/           @lophius-srl
+/.claude/           @lophius-srl
+/CLAUDE.md          @lophius-srl

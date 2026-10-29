@@ -1,0 +1,6 @@
+# Copier en .dev.vars (non versionné) pour `make dev`.
+# En production : `pnpm exec wrangler secret put <NOM>`.
+STRAVA_CLIENT_ID=
+STRAVA_CLIENT_SECRET=
+STRAVA_WEBHOOK_VERIFY_TOKEN=
+SESSION_SECRET=

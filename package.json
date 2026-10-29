@@ -1,0 +1,40 @@
+{
+  "name": "running-coach",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.20.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite build && wrangler dev",
+    "lint": "eslint . && prettier --check . && pnpm run typecheck",
+    "typecheck": "tsc -p src/worker && tsc -p src/web",
+    "format": "prettier --write . && eslint . --fix",
+    "test": "vitest run",
+    "build": "vite build && wrangler deploy --dry-run --outdir dist/worker",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "hono": "4.10.6",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20251111.0",
+    "@eslint/js": "9.39.1",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "@vitejs/plugin-react": "5.1.1",
+    "eslint": "9.39.1",
+    "eslint-plugin-react-hooks": "7.0.1",
+    "globals": "16.5.0",
+    "prettier": "3.6.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.46.4",
+    "vite": "7.2.2",
+    "vitest": "3.2.4",
+    "wrangler": "4.47.0"
+  }
+}

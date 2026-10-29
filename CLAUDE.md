@@ -4,9 +4,14 @@
 > Complète les sections marquées `TODO` au démarrage de chaque nouveau projet.
 
 ## Le projet
-- **Nom** : TODO
-- **But** : TODO (1–2 phrases : quel problème, pour qui)
-- **Stack** : TODO (langage, framework, base de données, hébergement)
+- **Nom** : running-coach
+- **But** : app web personnelle (un seul utilisateur au départ) pour suivre sa progression en course à pied
+  à partir de ses données Strava, et recevoir des séances adaptées à ses objectifs (course cible, chrono).
+- **Stack** : TypeScript, pnpm. Un seul Worker **Cloudflare** : API **Hono** + front **React/Vite** (assets
+  statiques), base **D1** (SQLite), tests **Vitest**, ESLint + Prettier, déploiement `wrangler deploy` (ADR 0002).
+- **Règles Strava (ADR 0003, non négociables)** : coaching **déterministe** ; **aucune donnée Strava (ni dérivée)
+  envoyée à un LLM** ; données Strava purgées après **7 jours** ; ne stocker durablement que les données saisies
+  par l'utilisateur (objectifs, plans générés) et les tokens OAuth.
 - **Décisions d'architecture** : voir `docs/adr/`
 
 ## Commandes (toujours passer par le Makefile)
@@ -34,7 +39,16 @@ La CI exécute exactement `make lint test build`. Si ça passe en local, ça pas
 - Noms explicites, fonctions courtes, pas de code mort ni de `console.log`/`print` de debug.
 - Pas de secrets dans le code : variables d'environnement + `.env.example` tenu à jour.
 - Toute décision technique structurante → un ADR dans `docs/adr/`.
-- TODO : ajouter les conventions propres à la stack (style, structure des dossiers…).
+- Structure :
+  - `src/worker/` : Worker Hono (routes HTTP, webhook Strava, cron). Routes API sous `/api/*`, plus `/health`.
+  - `src/web/` : front React (point d'entrée `main.tsx`, page `index.html` à la racine).
+  - `src/core/` (à venir) : logique de coaching pure (VMA, allures, charge), sans I/O, testée unitairement.
+  - Tests à côté du code : `fichier.test.ts`.
+- TypeScript `strict` ; pas de `any` ; modules ES ; un `tsconfig.json` par dossier (`src/worker`, `src/web`).
+- Style imposé par Prettier (config par défaut) et ESLint (`typescript-eslint`, `react-hooks`) : `make format`.
+- Code Worker compatible runtime Cloudflare (pas d'API Node-only) ; garder chaque requête sous 10 ms de CPU.
+- Secrets locaux dans `.dev.vars` (modèle `.dev.vars.example`) ; en production, `wrangler secret put`.
+- Dépendances : versions épinglées exactes dans `package.json`, mises à jour via Dependabot.
 
 ## Équipe d'agents (`.claude/agents/`)
 | Agent | Rôle | Quand l'appeler |

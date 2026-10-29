@@ -1,0 +1,9 @@
+dist
+coverage
+.wrangler
+pnpm-lock.yaml
+*.md
+.github
+.claude
+docs
+scripts

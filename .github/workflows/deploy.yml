@@ -1,11 +1,10 @@
 name: Deploy
 
-# Déploiement automatique après chaque merge sur main, une fois la CI verte.
-# Choisis UNE cible ci-dessous et supprime les autres (l'agent `architect` le fait au /kickoff).
-#
-# Souvent, le plus simple est de ne pas utiliser ce fichier : Vercel, Netlify et Cloudflare Pages
-# peuvent se connecter directement au repo GitHub et déployer chaque push sur main
-# (avec en bonus un déploiement "preview" pour chaque PR). Dans ce cas, supprime ce fichier.
+# Déploiement sur Cloudflare Workers après chaque merge sur main, une fois la CI verte.
+# Secrets à créer dans Settings → Environments → production :
+#   CLOUDFLARE_API_TOKEN  (modèle de jeton "Edit Cloudflare Workers")
+#   CLOUDFLARE_ACCOUNT_ID
+# Les secrets applicatifs (STRAVA_CLIENT_SECRET…) se posent avec `pnpm exec wrangler secret put <NOM>`.
 
 on:
   workflow_run:
@@ -26,23 +25,28 @@ jobs:
     permissions:
       contents: read
     env:
-      DEPLOY_HOOK_URL: ${{ secrets.DEPLOY_HOOK_URL }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Déploie exactement le commit validé par la CI.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
-      # --- Option A : service avec "deploy hook" (Render, Railway, Coolify…) ---
-      # Crée le secret DEPLOY_HOOK_URL dans Settings → Environments → production.
-      - name: Trigger deploy hook
-        if: env.DEPLOY_HOOK_URL != ''
-        run: curl -fsS -X POST "$DEPLOY_HOOK_URL"
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
 
-      - name: Nothing to deploy yet
-        if: env.DEPLOY_HOOK_URL == ''
-        run: echo "Aucune cible de déploiement configurée (voir les commentaires de deploy.yml)."
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: ${{ hashFiles('pnpm-lock.yaml') != '' && 'pnpm' || '' }}
 
-      # --- Option B : commande de déploiement du projet ---
-      # Décommente et remplis la cible `deploy` du Makefile (ex. wrangler, flyctl, firebase…).
-      # - name: Deploy
-      #   env:
-      #     DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
-      #   run: make install build deploy
+      - name: Check Cloudflare secrets
+        if: env.CLOUDFLARE_API_TOKEN == '' || env.CLOUDFLARE_ACCOUNT_ID == ''
+        run: |
+          echo "::error::Secrets CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID absents de l'environnement production."
+          exit 1
+
+      - name: Build and deploy
+        run: make install build deploy
