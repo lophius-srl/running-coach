@@ -15,7 +15,7 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         with:
           # "simple" fonctionne pour toutes les stacks (version dans version.txt).
           # Pour Node, Python, Go… tu peux passer à "node", "python", "go" : voir la doc de release-please.
