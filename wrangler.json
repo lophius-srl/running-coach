@@ -12,7 +12,7 @@
     {
       "binding": "DB",
       "database_name": "running-coach",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "780dc007-a7bc-462c-b823-ac795ded949e",
       "migrations_dir": "migrations"
     }
   ],
