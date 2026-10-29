@@ -30,7 +30,7 @@ function request(path: string, init: RequestInit = {}, bindings = testEnv) {
 
 function cookiesOf(response: Response): Record<string, string> {
   return Object.fromEntries(
-    response.headers.getSetCookie().map((header) => {
+    response.headers.getAll("Set-Cookie").map((header) => {
       const [pair] = header.split(";");
       const index = pair.indexOf("=");
       return [pair.slice(0, index), pair.slice(index + 1)];
@@ -40,7 +40,7 @@ function cookiesOf(response: Response): Record<string, string> {
 
 function sessionHeader(response: Response): string | undefined {
   return response.headers
-    .getSetCookie()
+    .getAll("Set-Cookie")
     .find((header) => header.startsWith("__Host-session="));
 }
 
@@ -109,7 +109,7 @@ describe("GET /api/auth/strava", () => {
     );
     expect(state).toMatch(/^[0-9a-f]{64}$/);
     expect(stateCookie).toBe(state);
-    const header = response.headers.getSetCookie()[0];
+    const header = response.headers.getAll("Set-Cookie")[0];
     expect(header).toMatch(/HttpOnly/);
     expect(header).toMatch(/Secure/);
     expect(header).toMatch(/SameSite=Lax/);
