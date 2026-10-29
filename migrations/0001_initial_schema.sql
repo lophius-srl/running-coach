@@ -66,7 +66,13 @@ CREATE TABLE strava_activities (
   id INTEGER PRIMARY KEY, -- id de l'activité Strava
   user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
   payload TEXT NOT NULL, -- JSON brut renvoyé par l'API Strava
-  fetched_at TEXT NOT NULL -- horodatage ISO 8601 de la récupération
+  -- Horodatage de la récupération, format unique de Date.toISOString()
+  -- (ex. 2026-10-29T08:00:00.000Z) : la purge compare ces chaînes entre elles.
+  -- strftime renvoie la valeur inchangée seulement si elle est déjà dans ce format
+  -- (GLOB n'est pas utilisable : D1 limite la longueur des motifs).
+  fetched_at TEXT NOT NULL CHECK (
+    strftime('%Y-%m-%dT%H:%M:%fZ', fetched_at) IS fetched_at
+  )
 );
 
 CREATE INDEX strava_activities_fetched_at_idx ON strava_activities (fetched_at);

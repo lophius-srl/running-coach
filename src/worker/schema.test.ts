@@ -236,3 +236,34 @@ describe("user deletion (Strava §6.3)", () => {
     expect(await count("plan_sessions")).toBe(0);
   });
 });
+
+describe("strava_activities.fetched_at", () => {
+  beforeEach(async () => {
+    await run("INSERT INTO users (id, strava_athlete_id) VALUES (1, 42)");
+  });
+
+  function insertActivity(fetchedAt: string) {
+    return env.DB.prepare(
+      "INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (1, 1, '{}', ?)",
+    )
+      .bind(fetchedAt)
+      .run();
+  }
+
+  it("accept the Date.toISOString() format", async () => {
+    await insertActivity(new Date("2026-10-29T08:00:00Z").toISOString());
+    expect(await count("strava_activities")).toBe(1);
+  });
+
+  it.each([
+    ["SQLite datetime() format", "2026-10-29 08:00:00"],
+    ["missing milliseconds", "2026-10-29T08:00:00Z"],
+    ["timezone offset", "2026-10-29T08:00:00.000+01:00"],
+    ["date only", "2026-10-29"],
+    ["epoch seconds", "1793260800"],
+    ["empty string", ""],
+    ["impossible date", "2026-13-45T08:00:00.000Z"],
+  ])("reject %s", async (_label, fetchedAt) => {
+    await expect(insertActivity(fetchedAt)).rejects.toThrow(/CHECK/);
+  });
+});
