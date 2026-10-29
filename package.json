@@ -8,7 +8,8 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "dev": "vite build && wrangler dev",
+    "dev": "pnpm run db:migrate && vite build && wrangler dev",
+    "db:migrate": "wrangler d1 migrations apply DB --local",
     "lint": "eslint . && prettier --check . && pnpm run typecheck",
     "typecheck": "tsc -p src/worker && tsc -p src/web",
     "format": "prettier --write . && eslint . --fix",
@@ -22,6 +23,7 @@
     "react-dom": "19.2.0"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.10.6",
     "@cloudflare/workers-types": "4.20251111.0",
     "@eslint/js": "9.39.1",
     "@types/react": "19.2.2",
