@@ -8,6 +8,9 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*", "/health"]
   },
+  "vars": {
+    "OWNER_ATHLETE_ID": "18664176"
+  },
   "d1_databases": [
     {
       "binding": "DB",
