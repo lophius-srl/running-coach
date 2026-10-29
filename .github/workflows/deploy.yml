@@ -19,7 +19,17 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    # Le filtre `branches: [main]` de workflow_run porte sur le nom de branche seul : une PR ouverte
+    # depuis la branche `main` d'un fork passerait. On exige donc un push sur main de CE dépôt,
+    # et un lancement manuel uniquement depuis main.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     environment: production
     permissions:
