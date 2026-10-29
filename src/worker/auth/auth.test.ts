@@ -270,4 +270,273 @@ describe("POST /api/auth/logout", () => {
     expect(sessionHeader(response)).toMatch(/Max-Age=0/);
     expect(await count("oauth_tokens")).toBe(1);
   });
+
+  it("expires the session cookie with the attributes it was set with", async () => {
+    const cookie = await login();
+
+    const response = await request("/api/auth/logout", {
+      method: "POST",
+      headers: { Cookie: cookie },
+    });
+
+    const header = sessionHeader(response);
+    expect(header).toMatch(/Path=\//);
+    expect(header).toMatch(/Secure/);
+    expect(header).toMatch(/HttpOnly/);
+  });
+
+  it("is not reachable with GET", async () => {
+    const response = await request("/api/auth/logout");
+    expect(response.status).toBe(404);
+  });
+});
+
+function mockTokenEndpoint(reply: () => Response) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (url === "https://www.strava.com/oauth/token") return reply();
+    return new Response(null, { status: 200 });
+  });
+}
+
+function tokenBody(athlete: unknown) {
+  return Response.json({
+    access_token: "access-1",
+    refresh_token: "refresh-1",
+    expires_at: 2_000_000_000,
+    athlete,
+  });
+}
+
+function callbackWithQuery(params: Record<string, string>, stateCookie = "") {
+  return request(`/api/auth/strava/callback?${new URLSearchParams(params)}`, {
+    headers: { Cookie: `oauth_state=${stateCookie}` },
+  });
+}
+
+async function expectNothingStored(response: Response) {
+  expect(sessionHeader(response)).toBeUndefined();
+  expect(await count("users")).toBe(0);
+  expect(await count("oauth_tokens")).toBe(0);
+}
+
+describe("callback edge cases", () => {
+  it("redirects home without calling Strava when the user denies access", async () => {
+    const fetchSpy = mockStravaToken(OWNER_ID);
+    const { state, stateCookie } = await startOAuth();
+
+    const response = await callbackWithQuery(
+      { state: state ?? "", error: "access_denied" },
+      stateCookie,
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("Location")).toBe("/");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    await expectNothingStored(response);
+  });
+
+  it("rejects a callback without code with 400", async () => {
+    const fetchSpy = mockStravaToken(OWNER_ID);
+    const { state, stateCookie } = await startOAuth();
+
+    const response = await callbackWithQuery(
+      { state: state ?? "", scope: STRAVA_SCOPE },
+      stateCookie,
+    );
+
+    expect(response.status).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    await expectNothingStored(response);
+  });
+
+  it("expires the state cookie after a successful login", async () => {
+    mockStravaToken(OWNER_ID);
+    const { state, stateCookie } = await startOAuth();
+
+    const response = await callback(state, stateCookie);
+
+    const stateHeader = response.headers
+      .getAll("Set-Cookie")
+      .find((header) => header.startsWith("oauth_state="));
+    expect(stateHeader).toMatch(/Max-Age=0/);
+    expect(stateHeader).toMatch(/Path=\/api\/auth\/strava\/callback/);
+  });
+
+  it("expires the state cookie even when the state is rejected", async () => {
+    const response = await callback("forged", "expected");
+
+    expect(response.status).toBe(400);
+    expect(cookiesOf(response).oauth_state).toBe("");
+  });
+
+  it.each([
+    ["a 4xx", () => new Response('{"message":"Bad"}', { status: 400 })],
+    ["a 5xx", () => new Response("Unavailable", { status: 503 })],
+    ["invalid JSON", () => new Response("<html>oops</html>")],
+    ["a body without tokens", () => Response.json({ athlete: { id: 42 } })],
+    ["a body without athlete", () => tokenBody(undefined)],
+    ["an athlete id as a string", () => tokenBody({ id: String(OWNER_ID) })],
+  ])(
+    "answers 502 and stores nothing when Strava returns %s",
+    async (_label, reply) => {
+      mockTokenEndpoint(reply);
+      const { state, stateCookie } = await startOAuth();
+
+      const response = await callback(state, stateCookie);
+
+      expect(response.status).toBe(502);
+      await expectNothingStored(response);
+    },
+  );
+
+  it("answers 502 and stores nothing when Strava is unreachable", async () => {
+    mockTokenEndpoint(() => {
+      throw new TypeError("Network connection lost");
+    });
+    const { state, stateCookie } = await startOAuth();
+
+    const response = await callback(state, stateCookie);
+
+    expect(response.status).toBe(502);
+    await expectNothingStored(response);
+  });
+
+  it("accepts the owner when OWNER_ATHLETE_ID has surrounding spaces", async () => {
+    mockStravaToken(OWNER_ID);
+    const bindings = { ...testEnv, OWNER_ATHLETE_ID: ` ${OWNER_ID} ` };
+    const { state, stateCookie } = await startOAuth(bindings);
+
+    const response = await callback(state, stateCookie, bindings);
+
+    expect(response.status).toBe(302);
+    expect(sessionHeader(response)).toBeDefined();
+  });
+
+  it("refuses an athlete whose id only starts like the owner's", async () => {
+    mockStravaToken(Number(`${OWNER_ID}0`));
+    const { state, stateCookie } = await startOAuth();
+
+    const response = await callback(state, stateCookie);
+
+    expect(response.status).toBe(403);
+    await expectNothingStored(response);
+  });
+
+  it("still answers 403 when the deauthorization call fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url === "https://www.strava.com/oauth/token") {
+        return tokenBody({ id: 999 });
+      }
+      throw new TypeError("Network connection lost");
+    });
+    const { state, stateCookie } = await startOAuth();
+
+    const response = await callback(state, stateCookie);
+
+    expect(response.status).toBe(403);
+    await expectNothingStored(response);
+  });
+});
+
+describe("token confidentiality", () => {
+  it("never exposes Strava tokens in responses or logs", async () => {
+    const logSpies = (["log", "info", "warn", "error", "debug"] as const).map(
+      (level) => vi.spyOn(console, level).mockImplementation(() => {}),
+    );
+    const fetchSpy = mockStravaToken(OWNER_ID);
+    const { state, stateCookie } = await startOAuth();
+    const loginResponse = await callback(state, stateCookie);
+    fetchSpy.mockRestore();
+    const session = cookiesOf(loginResponse)["__Host-session"];
+    const meResponse = await request("/api/me", {
+      headers: { Cookie: `__Host-session=${session}` },
+    });
+
+    for (const response of [loginResponse, meResponse]) {
+      const dump = `${[...response.headers].join("\n")}\n${await response.text()}`;
+      expect(dump).not.toMatch(/access-1|refresh-1/);
+    }
+    const logged = logSpies.flatMap((spy) => spy.mock.calls.flat()).join(" ");
+    expect(logged).not.toMatch(/access-1|refresh-1/);
+  });
+});
+
+describe("session guard bypass attempts", () => {
+  it.each([
+    "/api/me?x",
+    "/api/me/",
+    "/api/auth/../me",
+    "/api/auth/%2e%2e/me",
+    "/api/strava/webhook/../../me",
+    "/api/auth",
+    "/api/authx",
+    "/api/authx/me",
+    "/api/strava/webhooks",
+    "/api/strava/webhook-admin",
+    "/api/strava/webhookx/me",
+  ])("answers 401 without session on %s", async (path) => {
+    const response = await request(path);
+    expect(response.status).toBe(401);
+  });
+
+  it("does not serve /api/me under another letter case", async () => {
+    const response = await request("/API/me");
+    expect(response.status).toBe(404);
+  });
+
+  it("answers 401 for a valid session whose user no longer exists", async () => {
+    const cookie = await login();
+    await env.DB.prepare("DELETE FROM oauth_tokens").run();
+    await env.DB.prepare("DELETE FROM users").run();
+
+    const response = await request("/api/me", { headers: { Cookie: cookie } });
+
+    expect(response.status).toBe(401);
+  });
+
+  it("answers 401 when SESSION_SECRET is not configured", async () => {
+    const cookie = await login();
+
+    const response = await request(
+      "/api/me",
+      { headers: { Cookie: cookie } },
+      { ...testEnv, SESSION_SECRET: "" },
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it.each([
+    ["a non-numeric user id", "abc.9999999999"],
+    ["a missing expiration", "1"],
+    ["a negative user id", "-1.9999999999"],
+  ])(
+    "answers 401 for a correctly signed cookie with %s",
+    async (_label, value) => {
+      const forged = await generateSignedCookie(
+        "session",
+        value,
+        SESSION_SECRET,
+        { prefix: "host", secure: true, path: "/" },
+      );
+
+      const response = await request("/api/me", {
+        headers: { Cookie: forged.split(";")[0] },
+      });
+
+      expect(response.status).toBe(401);
+    },
+  );
+
+  it("ignores a session cookie without the __Host- prefix", async () => {
+    const cookie = await login();
+
+    const response = await request("/api/me", {
+      headers: { Cookie: cookie.replace("__Host-session", "session") },
+    });
+
+    expect(response.status).toBe(401);
+  });
 });
