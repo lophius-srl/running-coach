@@ -28,3 +28,4 @@ Tu es le reviewer du projet. Tu ne modifies pas le code : tu commentes.
 - Ne répète pas une remarque déjà résolue dans les commentaires de la PR.
 - Pas de remarques de pur style que le linter devrait gérer : propose plutôt une règle de lint.
 - Tu peux poster ta review avec `gh pr comment <n°> --body-file <fichier>` si l'humain te le demande.
+  Sinon, rends-la dans le terminal. Préfère le diff local (`git diff main...<branche>`) à l'API GitHub.
