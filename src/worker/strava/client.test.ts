@@ -8,7 +8,12 @@ import {
   it,
   vi,
 } from "vitest";
-import { getValidAccessToken, stravaApiFetch, StravaError } from "./client";
+import {
+  exchangeCode,
+  getValidAccessToken,
+  stravaApiFetch,
+  StravaError,
+} from "./client";
 
 const credentials = { STRAVA_CLIENT_ID: "id", STRAVA_CLIENT_SECRET: "secret" };
 const NOW_S = 1_800_000_000;
@@ -120,5 +125,37 @@ describe("stravaApiFetch", () => {
     expect(new Headers(init?.headers).get("Authorization")).toBe(
       "Bearer old-access",
     );
+  });
+});
+
+describe("token endpoint failures", () => {
+  it("turns a non-JSON body into a StravaError", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("<html>oops</html>"),
+    );
+
+    await expect(exchangeCode(credentials, "code")).rejects.toBeInstanceOf(
+      StravaError,
+    );
+  });
+
+  it("turns a network failure into a StravaError", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+      new TypeError("Network connection lost"),
+    );
+
+    await expect(exchangeCode(credentials, "code")).rejects.toBeInstanceOf(
+      StravaError,
+    );
+  });
+
+  it("keeps the stored tokens when the refresh answers invalid JSON", async () => {
+    await storeTokens(NOW_S - 10);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("not json"));
+
+    await expect(
+      getValidAccessToken(env.DB, credentials, 1, NOW_MS),
+    ).rejects.toBeInstanceOf(StravaError);
+    expect(await storedTokens()).toMatchObject({ access_token: "old-access" });
   });
 });

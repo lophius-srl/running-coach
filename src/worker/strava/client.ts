@@ -27,18 +27,27 @@ async function postToken(
   credentials: StravaCredentials,
   params: Record<string, string>,
 ): Promise<unknown> {
-  const response = await fetch(TOKEN_URL, {
-    method: "POST",
-    body: new URLSearchParams({
-      client_id: credentials.STRAVA_CLIENT_ID,
-      client_secret: credentials.STRAVA_CLIENT_SECRET,
-      ...params,
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(TOKEN_URL, {
+      method: "POST",
+      body: new URLSearchParams({
+        client_id: credentials.STRAVA_CLIENT_ID,
+        client_secret: credentials.STRAVA_CLIENT_SECRET,
+        ...params,
+      }),
+    });
+  } catch {
+    throw new StravaError("Strava token endpoint: unreachable");
+  }
   if (!response.ok) {
     throw new StravaError(`Strava token endpoint: HTTP ${response.status}`);
   }
-  return response.json();
+  try {
+    return await response.json();
+  } catch {
+    throw new StravaError("Strava token endpoint: invalid JSON");
+  }
 }
 
 function assertTokens(body: unknown): asserts body is StravaTokens {
