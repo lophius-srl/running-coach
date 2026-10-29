@@ -23,7 +23,7 @@ jobs:
 
       # --- Outils : pnpm (version lue dans "packageManager" de package.json) puis Node ---
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node
         uses: actions/setup-node@v4
