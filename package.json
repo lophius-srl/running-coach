@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "pnpm run db:migrate && vite build && wrangler dev",
     "db:migrate": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "lint": "eslint . && prettier --check . && pnpm run typecheck",
     "typecheck": "tsc -p src/worker && tsc -p src/web",
     "format": "prettier --write . && eslint . --fix",

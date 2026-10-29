@@ -30,9 +30,19 @@ Limites de l'offre gratuite vérifiées le 2026-10-29 :
 Secrets : `wrangler secret put` en production, `.dev.vars` en local (modèle : `.dev.vars.example`),
 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` dans l'environnement GitHub `production` pour la CI.
 
+Jeton `CLOUDFLARE_API_TOKEN` : jeton personnalisé limité au compte, avec les permissions
+**Account › Workers Scripts › Edit** (`wrangler deploy`) et **Account › D1 › Edit**
+(`wrangler d1 migrations apply DB --remote`, lancé par `deploy.yml` avant le déploiement).
+Le modèle « Edit Cloudflare Workers » ne donne pas forcément D1 › Edit : l'ajouter à la main.
+
+Migrations D1 : appliquées par `deploy.yml` après le build et avant `wrangler deploy`. D1 n'a pas de
+rollback, et un déploiement peut échouer après la migration. Chaque migration doit donc rester
+**additive et compatible avec la version N-1 du code** (pas de suppression ni de renommage de
+colonne ou de table utilisée). Vérifier l'état de la production : `wrangler d1 migrations list DB --remote`.
+
 ## Conséquences
 - Pas de dépendance Node-only côté Worker (vérifier la compatibilité runtime de chaque librairie).
 - Les calculs lourds (streams GPS) doivent rester légers ou être découpés pour tenir dans 10 ms de CPU.
-- La base D1 et les Cron Triggers seront ajoutés dans `wrangler.jsonc` par les issues qui en ont besoin
+- La base D1 et les Cron Triggers seront ajoutés dans `wrangler.json` par les issues qui en ont besoin
   (`wrangler d1 create running-coach`), pas dans le squelette.
 - Si les quotas gratuits changent ou deviennent bloquants, réévaluer (plan Workers Paid à 5 $/mois).
