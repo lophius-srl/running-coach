@@ -35,6 +35,11 @@ Jeton `CLOUDFLARE_API_TOKEN` : jeton personnalisé limité au compte, avec les p
 (`wrangler d1 migrations apply DB --remote`, lancé par `deploy.yml` avant le déploiement).
 Le modèle « Edit Cloudflare Workers » ne donne pas forcément D1 › Edit : l'ajouter à la main.
 
+Migrations D1 : appliquées par `deploy.yml` après le build et avant `wrangler deploy`. D1 n'a pas de
+rollback, et un déploiement peut échouer après la migration. Chaque migration doit donc rester
+**additive et compatible avec la version N-1 du code** (pas de suppression ni de renommage de
+colonne ou de table utilisée). Vérifier l'état de la production : `wrangler d1 migrations list DB --remote`.
+
 ## Conséquences
 - Pas de dépendance Node-only côté Worker (vérifier la compatibilité runtime de chaque librairie).
 - Les calculs lourds (streams GPS) doivent rester légers ou être découpés pour tenir dans 10 ms de CPU.
