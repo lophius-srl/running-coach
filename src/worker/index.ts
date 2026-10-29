@@ -5,17 +5,21 @@ import type { AppEnv } from "./env";
 
 export type { Bindings } from "./env";
 
-// Routes /api/* accessibles sans session.
-const PUBLIC_API_PREFIXES = ["/api/auth/", "/api/strava/webhook"];
+// Routes /api/* accessibles sans session : tout /api/auth/ (OAuth, logout) et le webhook
+// Strava, en chemin exact pour ne pas exposer /api/strava/webhook-admin, /api/strava/webhooks…
+const PUBLIC_API_PREFIX = "/api/auth/";
+const PUBLIC_API_PATHS = ["/api/strava/webhook"];
+
+function isPublicApiPath(path: string): boolean {
+  return path.startsWith(PUBLIC_API_PREFIX) || PUBLIC_API_PATHS.includes(path);
+}
 
 const app = new Hono<AppEnv>();
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 
 app.use("/api/*", async (c, next) => {
-  if (PUBLIC_API_PREFIXES.some((prefix) => c.req.path.startsWith(prefix))) {
-    return next();
-  }
+  if (isPublicApiPath(c.req.path)) return next();
   const userId = await readSession(c, c.env.SESSION_SECRET);
   if (userId === null) return c.json({ error: "unauthorized" }, 401);
   c.set("userId", userId);
