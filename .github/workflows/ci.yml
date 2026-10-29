@@ -21,31 +21,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # --- Installation des outils : détectée automatiquement selon les fichiers du projet ---
-      - name: Setup Node
-        if: hashFiles('package.json') != ''
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: ${{ hashFiles('pnpm-lock.yaml') != '' && 'pnpm' || 'npm' }}
-
+      # --- Outils : pnpm (version lue dans "packageManager" de package.json) puis Node ---
       - name: Setup pnpm
-        if: hashFiles('pnpm-lock.yaml') != ''
         uses: pnpm/action-setup@v4
 
-      - name: Setup Python
-        if: hashFiles('pyproject.toml', 'requirements*.txt') != ''
-        uses: actions/setup-python@v5
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          python-version: "3.12"
-
-      - name: Setup Go
-        if: hashFiles('go.mod') != ''
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-
-      # Autres stacks (Flutter, Rust, Java…) : ajoute ici l'action "setup-*" correspondante.
+          node-version: 22
+          # Le cache pnpm exige un lockfile : activé dès que pnpm-lock.yaml est versionné.
+          cache: ${{ hashFiles('pnpm-lock.yaml') != '' && 'pnpm' || '' }}
 
       # --- Les étapes qualité passent toutes par le Makefile ---
       - name: Install

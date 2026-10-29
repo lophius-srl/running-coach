@@ -9,14 +9,14 @@ updates:
       prefix: ci
     labels: ["type: chore", "dependencies"]
 
-  # Décommente l'écosystème de ta stack (npm, pip, gomod, cargo, pub, gradle, docker…).
-  # - package-ecosystem: npm
-  #   directory: /
-  #   schedule:
-  #     interval: weekly
-  #   commit-message:
-  #     prefix: chore
-  #   labels: ["type: chore", "dependencies"]
-  #   groups:
-  #     minor-and-patch:
-  #       update-types: [minor, patch]
+  # Dépendances npm (pnpm-lock.yaml est pris en charge par l'écosystème npm).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+    labels: ["type: chore", "dependencies"]
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
