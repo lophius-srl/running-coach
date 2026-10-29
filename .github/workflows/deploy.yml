@@ -2,7 +2,7 @@ name: Deploy
 
 # Déploiement sur Cloudflare Workers après chaque merge sur main, une fois la CI verte.
 # Secrets à créer dans Settings → Environments → production :
-#   CLOUDFLARE_API_TOKEN  (modèle de jeton "Edit Cloudflare Workers")
+#   CLOUDFLARE_API_TOKEN  (permissions : Account › Workers Scripts › Edit ET Account › D1 › Edit, voir ADR 0002)
 #   CLOUDFLARE_ACCOUNT_ID
 # Les secrets applicatifs (STRAVA_CLIENT_SECRET…) se posent avec `pnpm exec wrangler secret put <NOM>`.
 
@@ -48,5 +48,13 @@ jobs:
           echo "::error::Secrets CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID absents de l'environnement production."
           exit 1
 
-      - name: Build and deploy
-        run: make install build deploy
+      - name: Install and build
+        run: make install build
+
+      # Après le build (un build cassé ne touche pas la base), avant le déploiement (le nouveau code
+      # peut dépendre du nouveau schéma). Un échec arrête le job : le Worker n'est pas déployé.
+      - name: Apply D1 migrations (remote)
+        run: make db-migrate-remote
+
+      - name: Deploy
+        run: make deploy
