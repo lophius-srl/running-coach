@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 
 export type Bindings = {
+  DB: D1Database;
   STRAVA_CLIENT_ID: string;
   STRAVA_CLIENT_SECRET: string;
   STRAVA_WEBHOOK_VERIFY_TOKEN: string;

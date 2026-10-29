@@ -8,6 +8,14 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*", "/health"]
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "running-coach",
+      "database_id": "780dc007-a7bc-462c-b823-ac795ded949e",
+      "migrations_dir": "migrations"
+    }
+  ],
   "observability": {
     "enabled": true
   }
