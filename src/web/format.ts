@@ -4,9 +4,11 @@ function pad2(value: number): string {
   return String(value).padStart(2, "0");
 }
 
-// 8 432 m → « 8,43 km ».
+// 8 432 m → « 8,43 km ». Arrondi aux 10 m avant toFixed, qui arrondit mal les flottants
+// (9 995 m → « 10,00 km », 1 005 m → « 1,01 km »).
 export function formatDistance(distanceM: number): string {
-  return `${(distanceM / 1000).toFixed(2).replace(".", ",")} km`;
+  const km = Math.round(distanceM / 10) / 100;
+  return `${km.toFixed(2).replace(".", ",")} km`;
 }
 
 // Durée en h:mm:ss, arrondie à la seconde (3 000 s → « 0:50:00 »).

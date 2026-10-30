@@ -11,6 +11,11 @@ describe("formatDistance", () => {
     expect(formatDistance(8432)).toBe("8,43 km");
     expect(formatDistance(0)).toBe("0,00 km");
   });
+
+  it("rounds half-way distances up to the next 10 m", () => {
+    expect(formatDistance(9995)).toBe("10,00 km");
+    expect(formatDistance(1005)).toBe("1,01 km");
+  });
 });
 
 describe("formatDuration", () => {
