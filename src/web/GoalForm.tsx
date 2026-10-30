@@ -8,7 +8,9 @@ import {
   type GoalField,
   type SavedGoal,
 } from "../worker/goals/rules";
+import type { TrainingPaces } from "../core/paces";
 import { formatDuration, localIsoDate } from "./format";
+import { Paces } from "./Paces";
 
 const HEADING_ID = "goal-title";
 
@@ -134,38 +136,43 @@ function DistanceOptions() {
   );
 }
 
-async function fetchGoal(): Promise<SavedGoal | null> {
+type GoalResponse = { goal: SavedGoal | null; paces: TrainingPaces | null };
+type SaveResult = { errors: GoalErrors } | { paces: TrainingPaces | null };
+
+async function fetchGoal(): Promise<GoalResponse> {
   const response = await fetch("/api/goal");
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return ((await response.json()) as { goal: SavedGoal | null }).goal;
+  return (await response.json()) as GoalResponse;
 }
 
 async function saveGoal(
   input: Record<GoalField, unknown>,
-): Promise<GoalErrors | null> {
+): Promise<SaveResult> {
   const response = await fetch("/api/goal", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
   if (response.status === 400) {
-    return ((await response.json()) as { errors: GoalErrors }).errors;
+    return (await response.json()) as { errors: GoalErrors };
   }
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return null;
+  return { paces: ((await response.json()) as GoalResponse).paces };
 }
 
 export function GoalForm() {
   const [form, setForm] = useState<Form>(EMPTY_FORM);
   const [errors, setErrors] = useState<GoalErrors>({});
   const [status, setStatus] = useState<Status>("loading");
+  const [paces, setPaces] = useState<TrainingPaces | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
 
   // Sans objectif chargé, pas de formulaire : un enregistrement écraserait l'objectif existant.
   useEffect(() => {
     fetchGoal()
-      .then((goal) => {
+      .then(({ goal, paces }) => {
         if (goal) setForm(toForm(goal));
+        setPaces(paces);
         setStatus("ready");
       })
       .catch(() => setStatus("loadFailed"));
@@ -204,9 +211,15 @@ export function GoalForm() {
     if (!local.ok) return showErrors(local.errors);
     setStatus("saving");
     try {
-      const serverErrors = await saveGoal(input);
-      showErrors(serverErrors ?? {});
-      setStatus(serverErrors ? "ready" : "saved");
+      const result = await saveGoal(input);
+      if ("errors" in result) {
+        showErrors(result.errors);
+        setStatus("ready");
+      } else {
+        showErrors({});
+        setPaces(result.paces);
+        setStatus("saved");
+      }
     } catch {
       setStatus("saveFailed");
     }
@@ -369,6 +382,7 @@ export function GoalForm() {
           </p>
         )}
       </form>
+      {paces && <Paces paces={paces} />}
     </section>
   );
 }
