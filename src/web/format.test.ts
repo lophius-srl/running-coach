@@ -4,6 +4,7 @@ import {
   formatDuration,
   formatHeartrate,
   formatPace,
+  formatRunName,
   formatStartDate,
 } from "./format";
 
@@ -93,5 +94,16 @@ describe("formatHeartrate", () => {
 
   it("shows a dash when the heart rate is unknown", () => {
     expect(formatHeartrate(null)).toBe("–");
+  });
+});
+
+describe("formatRunName", () => {
+  it("keeps the Strava name, without surrounding spaces", () => {
+    expect(formatRunName("Sortie longue")).toBe("Sortie longue");
+    expect(formatRunName("  Fractionné  ")).toBe("Fractionné");
+  });
+
+  it.each(["", "   "])("falls back to a default title for %j", (name) => {
+    expect(formatRunName(name)).toBe("Course sans titre");
   });
 });

@@ -4,6 +4,7 @@ import {
   formatDuration,
   formatHeartrate,
   formatPace,
+  formatRunName,
   formatStartDate,
 } from "./format";
 
@@ -38,7 +39,7 @@ function RunCard({ run }: { run: RecentRunsData["runs"][number] }) {
   const startDate = formatStartDate(run.startDate);
   return (
     <li className="card run-card">
-      <h3 className="run-name">{run.name || "Course sans titre"}</h3>
+      <h3 className="run-name">{formatRunName(run.name)}</h3>
       <p className="muted">
         <time dateTime={run.startDate}>{startDate}</time>
       </p>

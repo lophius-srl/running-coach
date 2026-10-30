@@ -43,3 +43,8 @@ export function formatHeartrate(averageHeartrate: number | null): string {
   if (averageHeartrate === null) return "–";
   return `${Math.round(averageHeartrate)} bpm`;
 }
+
+// Nom de la course tel que saisi sur Strava ; repli si vide ou fait d'espaces.
+export function formatRunName(name: string): string {
+  return name.trim() || "Course sans titre";
+}
