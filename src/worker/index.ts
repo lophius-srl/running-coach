@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { summarizeRecentRuns } from "./activities/recent";
 import { authRoutes } from "./auth/routes";
 import { readSession } from "./auth/session";
+import { goalRoutes } from "./goals/routes";
 import type { AppEnv, Bindings } from "./env";
 import { StravaError } from "./strava/client";
 import { runDailySync, runSync } from "./sync/sync";
@@ -30,6 +31,7 @@ app.use("/api/*", async (c, next) => {
 });
 
 app.route("/api/auth", authRoutes);
+app.route("/api/goal", goalRoutes);
 
 app.get("/api/me", async (c) => {
   const user = await c.env.DB.prepare(
