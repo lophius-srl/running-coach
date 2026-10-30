@@ -127,6 +127,7 @@ a {
   width: 100%;
   max-width: var(--content-width);
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0 auto;
   padding: var(--space-4);
 }
@@ -215,8 +216,10 @@ a {
   border-radius: var(--radius-sm);
 }
 
+/* Taille d'origine du bouton officiel, jamais réduite ni déformée. */
 .strava-connect img {
   width: 237px;
+  max-width: none;
   height: 48px;
 }
 
@@ -319,10 +322,16 @@ a {
 }
 
 .key-figure dd {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-md);
   font-weight: 700;
   line-height: 1.2;
   overflow-wrap: break-word;
+}
+
+@media (min-width: 400px) {
+  .key-figure dd {
+    font-size: var(--font-size-lg);
+  }
 }
 
 @media (min-width: 480px) {
