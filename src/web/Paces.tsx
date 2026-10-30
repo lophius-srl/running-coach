@@ -1,5 +1,5 @@
 import type { TrainingPaces } from "../core/paces";
-import { formatDuration, formatPaceRange } from "./format";
+import { formatDuration, formatPaceRange, formatSpeedRange } from "./format";
 
 const HEADING_ID = "paces-title";
 
@@ -29,7 +29,12 @@ export function Paces({ paces }: { paces: TrainingPaces }) {
                 <dt>
                   {label} <span className="muted">({hint})</span>
                 </dt>
-                <dd>{formatPaceRange(zone.fastSPerKm, zone.slowSPerKm)}</dd>
+                <dd>
+                  {formatPaceRange(zone.fastSPerKm, zone.slowSPerKm)}
+                  <span className="pace-speed muted">
+                    {formatSpeedRange(zone.fastSPerKm, zone.slowSPerKm)}
+                  </span>
+                </dd>
               </div>
             );
           })}
