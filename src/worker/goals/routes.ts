@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
-import { utcIsoDate, validateGoal, type Goal } from "./rules";
+import { utcIsoDate, validateGoal, type SavedGoal } from "./rules";
 
 type GoalRow = {
   distance_m: number;
@@ -9,12 +9,6 @@ type GoalRow = {
   reference_distance_m: number | null;
   reference_time_s: number | null;
   available_days: string;
-};
-
-// Objectif enregistré : le chrono de référence peut manquer sur une ligne antérieure à #13.
-export type SavedGoal = Omit<Goal, "referenceDistanceM" | "referenceTimeS"> & {
-  referenceDistanceM: number | null;
-  referenceTimeS: number | null;
 };
 
 function toSavedGoal(row: GoalRow): SavedGoal {

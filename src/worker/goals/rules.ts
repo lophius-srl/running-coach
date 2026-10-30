@@ -33,6 +33,12 @@ export type Goal = {
   availableDays: number[]; // jours ISO, uniques, triés
 };
 
+// Objectif enregistré : le chrono de référence peut manquer sur une ligne antérieure à #13.
+export type SavedGoal = Omit<Goal, "referenceDistanceM" | "referenceTimeS"> & {
+  referenceDistanceM: number | null;
+  referenceTimeS: number | null;
+};
+
 export type GoalField = keyof Goal;
 export type GoalErrors = Partial<Record<GoalField, string>>;
 export type GoalValidation =

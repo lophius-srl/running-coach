@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { RecentRuns as RecentRunsData } from "../worker/activities/recent";
+import { GoalForm } from "./GoalForm";
 import { RecentRuns } from "./RecentRuns";
 
 type Session =
@@ -193,6 +194,7 @@ export function App() {
             {activities.status === "failed" && (
               <Alert message="Impossible de charger tes courses récentes." />
             )}
+            <GoalForm />
           </>
         )}
       </main>
