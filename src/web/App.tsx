@@ -7,9 +7,6 @@ type Session =
   | { status: "anonymous" }
   | { status: "connected"; athleteId: number };
 
-// Couleur de marque Strava (consignes : https://developers.strava.com/guidelines/).
-const STRAVA_ORANGE = "#FC5200";
-
 type SyncState =
   | { status: "idle" }
   | { status: "running" }
@@ -23,14 +20,13 @@ async function requestSync(): Promise<SyncState> {
   return { status: "done", imported };
 }
 
+// Message de suivi (zone role="status") ; l'échec est affiché à part, en alerte.
 function syncMessage(sync: SyncState): string {
   switch (sync.status) {
     case "running":
       return "Synchronisation en cours…";
     case "done":
       return `${sync.imported} course(s) des 7 derniers jours synchronisée(s).`;
-    case "failed":
-      return "Échec de la synchronisation, réessaie plus tard.";
     default:
       return "";
   }
@@ -56,6 +52,57 @@ async function fetchSession(): Promise<Session> {
   if (!response.ok) return { status: "anonymous" };
   const { athleteId } = (await response.json()) as { athleteId: number };
   return { status: "connected", athleteId };
+}
+
+function Loading({ label }: { label: string }) {
+  return (
+    <p className="card state loading" role="status">
+      <span className="spinner" aria-hidden="true" />
+      {label}
+    </p>
+  );
+}
+
+// Erreur annoncée aux lecteurs d'écran et signalée par un libellé, pas seulement par la couleur.
+function Alert({ message }: { message: string }) {
+  return (
+    <p className="alert" role="alert">
+      <span className="alert-label">Erreur :</span> {message}
+    </p>
+  );
+}
+
+// Bouton officiel du kit de marque Strava (https://developers.strava.com/guidelines/), non modifié.
+function ConnectWithStrava() {
+  return (
+    <a className="strava-connect" href="/api/auth/strava">
+      <img
+        src="/strava/btn_strava_connect_with_orange.svg"
+        width={237}
+        height={48}
+        alt="Connect with Strava"
+      />
+    </a>
+  );
+}
+
+// Logo officiel « Powered by Strava », en noir sur thème clair et en blanc sur thème sombre.
+function PoweredByStrava() {
+  return (
+    <picture>
+      <source
+        srcSet="/strava/api_logo_pwrdBy_strava_horiz_white.svg"
+        media="(prefers-color-scheme: dark)"
+      />
+      <img
+        className="powered-by"
+        src="/strava/api_logo_pwrdBy_strava_horiz_black.svg"
+        width={365}
+        height={37}
+        alt="Powered by Strava"
+      />
+    </picture>
+  );
 }
 
 export function App() {
@@ -90,51 +137,68 @@ export function App() {
     if (result.status === "done") setActivities(await loadActivities());
   }
 
+  const syncing = sync.status === "running";
+
   return (
-    <main>
-      <h1>Running Coach</h1>
-      {session.status === "anonymous" && (
-        <a
-          href="/api/auth/strava"
-          style={{
-            display: "inline-block",
-            padding: "0.6em 1.2em",
-            background: STRAVA_ORANGE,
-            color: "#fff",
-            fontWeight: 600,
-            textDecoration: "none",
-            borderRadius: 4,
-          }}
-        >
-          Connect with Strava
-        </a>
-      )}
-      {session.status === "connected" && (
-        <p>
-          Connecté (athlète Strava n° {session.athleteId}).{" "}
-          <button type="button" onClick={logout}>
+    <div className="layout">
+      <header className="app-header">
+        <h1 className="app-title">Running Coach</h1>
+        {session.status === "connected" && (
+          <button type="button" className="button" onClick={logout}>
             Se déconnecter
           </button>
-        </p>
-      )}
-      {session.status === "connected" && (
-        <p>
-          <button
-            type="button"
-            onClick={synchronize}
-            disabled={sync.status === "running"}
-          >
-            Synchroniser maintenant
-          </button>{" "}
-          <span role="status">{syncMessage(sync)}</span>
-        </p>
-      )}
-      {session.status === "connected" && activities.status === "loaded" && (
-        <RecentRuns data={activities.data} />
-      )}
-      {session.status === "connected" && activities.status === "failed" && (
-        <p role="alert">Impossible de charger tes courses récentes.</p>
-      )}
-    </main>
+        )}
+      </header>
+      <main>
+        {session.status === "loading" && <Loading label="Chargement…" />}
+        {session.status === "anonymous" && (
+          <section className="card state">
+            <p>
+              Connecte ton compte Strava pour suivre tes courses de la semaine.
+            </p>
+            <p>
+              <ConnectWithStrava />
+            </p>
+          </section>
+        )}
+        {session.status === "connected" && (
+          <>
+            <p className="muted">
+              Connecté (athlète Strava n° {session.athleteId}).
+            </p>
+            <div className="toolbar">
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={synchronize}
+                disabled={syncing}
+                aria-busy={syncing}
+              >
+                {syncing && <span className="spinner" aria-hidden="true" />}
+                Synchroniser maintenant
+              </button>
+              <span className="muted" role="status">
+                {syncMessage(sync)}
+              </span>
+            </div>
+            {sync.status === "failed" && (
+              <Alert message="Échec de la synchronisation, réessaie plus tard." />
+            )}
+            {activities.status === "loading" && (
+              <Loading label="Chargement de tes courses…" />
+            )}
+            {activities.status === "loaded" && (
+              <RecentRuns data={activities.data} />
+            )}
+            {activities.status === "failed" && (
+              <Alert message="Impossible de charger tes courses récentes." />
+            )}
+          </>
+        )}
+      </main>
+      <footer className="app-footer">
+        <PoweredByStrava />
+      </footer>
+    </div>
   );
 }

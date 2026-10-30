@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   formatDistance,
   formatDuration,
+  formatHeartrate,
   formatPace,
-  formatRunCount,
+  formatRunName,
   formatStartDate,
 } from "./format";
 
@@ -73,12 +74,36 @@ describe("formatStartDate", () => {
   });
 });
 
-describe("formatRunCount", () => {
+describe("formatHeartrate", () => {
+  it("rounds the average heart rate to the nearest beat", () => {
+    expect(formatHeartrate(151.6)).toBe("152 bpm");
+    expect(formatHeartrate(140)).toBe("140 bpm");
+  });
+
   it.each([
-    [0, "0 course"],
-    [1, "1 course"],
-    [2, "2 courses"],
-  ])("formats %s as %s", (count, expected) => {
-    expect(formatRunCount(count)).toBe(expected);
+    [150.5, "151 bpm"],
+    [150.49, "150 bpm"],
+    [149.999, "150 bpm"],
+  ])("rounds %s half up to %s", (heartrate, expected) => {
+    expect(formatHeartrate(heartrate)).toBe(expected);
+  });
+
+  it("keeps three-digit heart rates whole", () => {
+    expect(formatHeartrate(205.2)).toBe("205 bpm");
+  });
+
+  it("shows a dash when the heart rate is unknown", () => {
+    expect(formatHeartrate(null)).toBe("–");
+  });
+});
+
+describe("formatRunName", () => {
+  it("keeps the Strava name, without surrounding spaces", () => {
+    expect(formatRunName("Sortie longue")).toBe("Sortie longue");
+    expect(formatRunName("  Fractionné  ")).toBe("Fractionné");
+  });
+
+  it.each(["", "   "])("falls back to a default title for %j", (name) => {
+    expect(formatRunName(name)).toBe("Course sans titre");
   });
 });
