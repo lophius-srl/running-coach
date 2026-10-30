@@ -16,10 +16,14 @@ describe("formatDistance", () => {
 describe("formatDuration", () => {
   it.each([
     [0, "0:00:00"],
+    [59.5, "0:01:00"],
     [59.6, "0:01:00"],
+    [3599.5, "1:00:00"],
+    [3600, "1:00:00"],
     [3000, "0:50:00"],
     [3725, "1:02:05"],
     [36000, "10:00:00"],
+    [360000, "100:00:00"],
   ])("formats %s s as %s", (seconds, expected) => {
     expect(formatDuration(seconds)).toBe(expected);
   });
@@ -31,6 +35,9 @@ describe("formatPace", () => {
     [299.6, "5:00/km"],
     [334.4, "5:34/km"],
     [65, "1:05/km"],
+    [59.5, "1:00/km"],
+    [599.5, "10:00/km"],
+    [0, "0:00/km"],
   ])("formats %s s/km as %s", (pace, expected) => {
     expect(formatPace(pace)).toBe(expected);
   });
@@ -46,5 +53,16 @@ describe("formatStartDate", () => {
     expect(formatted).toContain("29");
     expect(formatted).toContain("oct");
     expect(formatted).toContain("06:05");
+  });
+
+  it("shows the start in the requested time zone", () => {
+    const lateEvening = "2026-10-29T23:30:00Z";
+    const utc = formatStartDate(lateEvening, "UTC");
+    const paris = formatStartDate(lateEvening, "Europe/Paris");
+
+    expect(utc).toContain("29");
+    expect(utc).toContain("23:30");
+    expect(paris).toContain("30");
+    expect(paris).toContain("00:30");
   });
 });

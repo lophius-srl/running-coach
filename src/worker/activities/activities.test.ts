@@ -1,5 +1,13 @@
 import { applyD1Migrations, env } from "cloudflare:test";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { generateSignedCookie } from "hono/cookie";
 import { app } from "../index";
 import type { Bindings } from "../env";
@@ -103,6 +111,54 @@ describe("GET /api/activities", () => {
     expect(await response.json()).toEqual({
       runs: [],
       total: { count: 0, distanceM: 0, movingTimeS: 0 },
+    });
+  });
+
+  it("returns only the runs of the session user", async () => {
+    await insertRun(10, 1, daysAgo(1));
+    await insertRun(20, 2, daysAgo(1));
+
+    const response = await getActivities({ Cookie: await sessionCookie(2) });
+
+    const body = await response.json<{ runs: { id: number }[] }>();
+    expect(body.runs.map((run) => run.id)).toEqual([20]);
+  });
+
+  it("skips a malformed payload instead of failing", async () => {
+    await insertRun(10, 1, daysAgo(1));
+    await env.DB.prepare(
+      "INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (11, 1, 'oops', ?)",
+    )
+      .bind(new Date().toISOString())
+      .run();
+
+    const response = await getActivities({ Cookie: await sessionCookie(1) });
+
+    expect(response.status).toBe(200);
+    const body = await response.json<{ runs: { id: number }[] }>();
+    expect(body.runs.map((run) => run.id)).toEqual([10]);
+  });
+
+  describe("with a frozen clock", () => {
+    const NOW = new Date("2026-10-30T04:00:00.000Z");
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(NOW);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("keeps a run started exactly 7 days ago and drops one a second older", async () => {
+      await insertRun(10, 1, "2026-10-23T04:00:00.000Z");
+      await insertRun(11, 1, "2026-10-23T03:59:59.000Z");
+
+      const response = await getActivities({ Cookie: await sessionCookie(1) });
+
+      const body = await response.json<{ runs: { id: number }[] }>();
+      expect(body.runs.map((run) => run.id)).toEqual([10]);
     });
   });
 });

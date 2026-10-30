@@ -49,6 +49,19 @@ describe("parseRun", () => {
     ).toBeNull();
   });
 
+  it("leaves a negative heart rate empty", () => {
+    expect(
+      parseRun(payload({ average_heartrate: -1 }))?.averageHeartrate,
+    ).toBeNull();
+  });
+
+  it("keeps a zero-distance run with an unknown pace", () => {
+    const run = parseRun(payload({ distance: 0, moving_time: 600 }));
+
+    expect(run?.distanceM).toBe(0);
+    expect(run?.paceSPerKm).toBeNull();
+  });
+
   it("defaults a missing name to an empty string", () => {
     expect(parseRun(payload({ name: null }))?.name).toBe("");
   });
@@ -99,6 +112,41 @@ describe("summarizeRecentRuns", () => {
     );
 
     expect(summary.runs.map((run) => run.id)).toEqual([1]);
+  });
+
+  it("compares start dates as instants, whatever their UTC offset", () => {
+    const summary = summarizeRecentRuns(
+      [
+        payload({ id: 1, start_date: "2026-10-23T06:00:00+02:00" }), // = 04:00Z, pile 7 jours
+        payload({ id: 2, start_date: "2026-10-23T05:59:59+02:00" }),
+      ],
+      NOW_MS,
+    );
+
+    expect(summary.runs.map((run) => run.id)).toEqual([1]);
+  });
+
+  it("keeps the input order for runs started at the same time", () => {
+    const sameStart = { start_date: "2026-10-28T06:00:00Z" };
+    const summary = summarizeRecentRuns(
+      [payload({ id: 7, ...sameStart }), payload({ id: 3, ...sameStart })],
+      NOW_MS,
+    );
+
+    expect(summary.runs.map((run) => run.id)).toEqual([7, 3]);
+  });
+
+  it("counts a zero-distance run in the totals", () => {
+    const summary = summarizeRecentRuns(
+      [payload({ id: 1 }), payload({ id: 2, distance: 0, moving_time: 600 })],
+      NOW_MS,
+    );
+
+    expect(summary.total).toEqual({
+      count: 2,
+      distanceM: 10000,
+      movingTimeS: 3600,
+    });
   });
 
   it("skips malformed payloads without failing", () => {
