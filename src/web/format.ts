@@ -35,6 +35,13 @@ export function formatPaceRange(fastSPerKm: number, slowSPerKm: number) {
   return `${paceClock(fastSPerKm)} – ${paceClock(slowSPerKm)}/km`;
 }
 
+// Même fourchette en vitesse, de la plus lente à la plus rapide : « 11,3 – 11,8 km/h ».
+export function formatSpeedRange(fastSPerKm: number, slowSPerKm: number) {
+  const kmh = (secondsPerKm: number) =>
+    (3600 / secondsPerKm).toFixed(1).replace(".", ",");
+  return `${kmh(slowSPerKm)} – ${kmh(fastSPerKm)} km/h`;
+}
+
 // Date et heure de départ, dans le fuseau du navigateur par défaut.
 export function formatStartDate(iso: string, timeZone?: string): string {
   return new Date(iso).toLocaleString("fr-FR", {
