@@ -14,12 +14,15 @@ import {
   type ImportedRun,
 } from "./history-csv";
 
+// Horloge figée : les dates de la fixture (≤ 28 oct. 2026) sont dans le passé.
+const NOW_MS = Date.parse("2026-10-30T12:00:00.000Z");
+
 const HEADER =
   "Activity ID,Activity Date,Activity Name,Activity Type,Distance,Moving Time";
 
 function readFile(text: string): HistoryFile {
-  const result = readActivitiesCsv(text);
-  if (!result.ok) throw new Error(`missing ${result.missingColumns}`);
+  const result = readActivitiesCsv(text, NOW_MS);
+  if (!result.ok) throw new Error(`unreadable: ${result.reason}`);
   return result.file;
 }
 
@@ -188,7 +191,7 @@ describe("readActivitiesCsv on the synthetic Strava export", () => {
 
   it("produces runs that the Worker accepts unchanged", () => {
     for (const parsed of file.runs) {
-      expect(validateImportedRun(parsed)).toEqual(parsed);
+      expect(validateImportedRun(parsed, NOW_MS)).toEqual(parsed);
     }
   });
 });
@@ -214,8 +217,11 @@ describe("readActivitiesCsv", () => {
   });
 
   it("lists the missing required columns", () => {
-    expect(readActivitiesCsv("Activity ID,Activity Name\n1,x\n")).toEqual({
+    expect(
+      readActivitiesCsv("Activity ID,Activity Name\n1,x\n", NOW_MS),
+    ).toEqual({
       ok: false,
+      reason: "missingColumns",
       missingColumns: [
         "Activity Date",
         "Activity Type",
@@ -229,7 +235,7 @@ describe("readActivitiesCsv", () => {
     ["an empty file", ""],
     ["a binary file", "PK\u0003\u0004\u0014\u0000\u0008"],
   ])("refuses %s", (_label, text) => {
-    expect(readActivitiesCsv(text).ok).toBe(false);
+    expect(readActivitiesCsv(text, NOW_MS).ok).toBe(false);
   });
 
   it("keeps the last line of a run listed twice", () => {
@@ -238,7 +244,9 @@ describe("readActivitiesCsv", () => {
       '1,"Mar 14, 2021, 7:02:11 AM",avant,Run,10,3000\n' +
       '1,"Mar 14, 2021, 7:02:11 AM",après,Run,10,3000\n';
 
-    expect(readFile(text).runs.map((r) => r.name)).toEqual(["après"]);
+    const file = readFile(text);
+    expect(file.runs.map((r) => r.name)).toEqual(["après"]);
+    expect(file.duplicates).toBe(1);
   });
 
   it("rejects rows with an unreadable id, distance or duration, and skips blank lines", () => {
@@ -252,6 +260,7 @@ describe("readActivitiesCsv", () => {
     expect(readFile(text)).toEqual({
       runs: [],
       otherSports: 0,
+      duplicates: 0,
       invalid: { id: 1, date: 0, distance: 1, duration: 1, pace: 1 },
       firstDate: null,
       lastDate: null,
@@ -263,7 +272,7 @@ describe("readActivitiesCsv", () => {
       "Activity ID;Activity Date;Activity Type;Distance;Moving Time\n" +
       "1;Mar 14, 2021, 7:02:11 AM;Run;10;3000\n";
 
-    expect(readActivitiesCsv(text)).toMatchObject({
+    expect(readActivitiesCsv(text, NOW_MS)).toMatchObject({
       ok: false,
       missingColumns: expect.arrayContaining(["Activity ID", "Distance"]),
     });
@@ -368,37 +377,94 @@ describe("readActivitiesCsv", () => {
     },
   );
 
-  // BUG #35 : un guillemet non fermé (description tronquée, export corrompu) avale en silence tout
-  // le reste du fichier dans un seul champ : l'aperçu annonce 0 course et 0 ligne ignorée.
-  // Repro : en-tête + `1,"Mar 14…",x,Run,10,3000,"oops` suivi de 2 courses valides → runs = [].
-  // Correction suggérée : parseCsv signale un guillemet encore ouvert en fin de texte, et
-  // readActivitiesCsv rend `{ ok: false, … }` avec un message clair (« guillemet non fermé ligne N »).
-  it.fails(
-    "reports an unclosed quote instead of silently dropping the next runs",
-    () => {
-      const text =
-        `${HEADER},Activity Description\n` +
-        '1,"Mar 14, 2021, 7:02:11 AM",x,Run,10,3000,"oops\n' +
-        '2,"Mar 15, 2021, 7:02:11 AM",y,Run,10,3000,\n' +
-        '3,"Mar 16, 2021, 7:02:11 AM",z,Run,10,3000,\n';
+  it("reports a closing quote followed by other characters", () => {
+    const text = `${HEADER}\n1,"Mar 14, 2021, 7:02:11 AM","x"y,Run,10,3000\n`;
 
-      expect(readActivitiesCsv(text).ok).toBe(false);
-    },
-  );
+    expect(readActivitiesCsv(text, NOW_MS)).toEqual({
+      ok: false,
+      reason: "malformed",
+    });
+  });
 
-  // BUG #35 (mineur) : « 1,234 » (milliers à l'anglaise) est lu comme 1,234 m de dénivelé, sans rejet.
-  // Distance et durée sont rattrapées par le contrôle d'allure, pas le dénivelé (facultatif), qui
-  // serait stocké faux durablement. Repro : colonne Elevation Gain = "1,234" → elevationGainM = 1.234.
-  // Correction suggérée : traiter le motif ambigu /^\d{1,3},\d{3}$/ comme illisible (null), au moins
-  // pour les champs facultatifs.
-  it.fails(
-    "does not misread an English thousands separator in the elevation gain",
-    () => {
-      const text = `${HEADER},Elevation Gain\n1,"Mar 14, 2021, 7:02:11 AM",,Run,10,3000,"1,234"\n`;
+  // Bug trouvé en QA : un guillemet non fermé avalait en silence tout le reste du fichier.
+  it("reports an unclosed quote instead of silently dropping the next runs", () => {
+    const text =
+      `${HEADER},Activity Description\n` +
+      '1,"Mar 14, 2021, 7:02:11 AM",x,Run,10,3000,"oops\n' +
+      '2,"Mar 15, 2021, 7:02:11 AM",y,Run,10,3000,\n' +
+      '3,"Mar 16, 2021, 7:02:11 AM",z,Run,10,3000,\n';
 
-      expect(readFile(text).runs[0].elevationGainM).not.toBe(1.234);
-    },
-  );
+    expect(readActivitiesCsv(text, NOW_MS)).toEqual({
+      ok: false,
+      reason: "malformed",
+    });
+  });
+
+  // Bug trouvé en QA : « 1,234 » (milliers à l'anglaise) était lu comme 1,234 m de dénivelé.
+  it("does not misread an English thousands separator in the elevation gain", () => {
+    const text = `${HEADER},Elevation Gain\n1,"Mar 14, 2021, 7:02:11 AM",,Run,10,3000,"1,234"\n`;
+
+    expect(readFile(text).runs[0].elevationGainM).toBeNull();
+  });
+
+  it("skips blank lines before the header", () => {
+    const text = `\n\r\n  \n${HEADER}\n1,"Mar 14, 2021, 7:02:11 AM",x,Run,10,3000\n`;
+
+    expect(readFile(text).runs.map((r) => r.id)).toEqual([1]);
+  });
+
+  it("reads a decimal elevation gain with a comma", () => {
+    const text = `${HEADER},Elevation Gain\n1,"Mar 14, 2021, 7:02:11 AM",,Run,10,3000,"12,5"\n`;
+
+    expect(readFile(text).runs[0].elevationGainM).toBe(12.5);
+  });
+
+  it("rejects runs dated after tomorrow", () => {
+    const text =
+      `${HEADER}\n` +
+      '1,"Oct 31, 2026, 11:00:00 AM",,Run,10,3000\n' +
+      '2,"Nov 1, 2026, 7:00:00 AM",,Run,10,3000\n' +
+      '3,"Mar 14, 2021, 7:02:11 AM",,Run,10,3000\n' +
+      '4,"Mar 15, 2021, 7:02:11 AM",,Run,10,3000\n';
+
+    const file = readFile(text);
+    expect(file.runs.map((r) => r.id)).toEqual([3, 4, 1]);
+    expect(file.invalid.date).toBe(1);
+  });
+
+  it("rejects a distance above 500 km", () => {
+    const text =
+      `${HEADER}\n` +
+      '1,"Mar 14, 2021, 7:02:11 AM",,Run,500,300000\n' +
+      '2,"Mar 14, 2021, 7:02:11 AM",,Run,500.1,300000\n';
+
+    const file = readFile(text);
+    expect(file.runs.map((r) => r.id)).toEqual([1]);
+    expect(file.invalid.distance).toBe(1);
+  });
+
+  it("refuses the file when most run dates are unreadable (localised export)", () => {
+    const text =
+      `${HEADER}\n` +
+      '1,"14 mars 2021, 07:02:11",,Run,10,3000\n' +
+      '2,"15 mars 2021, 07:02:11",,Run,10,3000\n' +
+      '3,"Mar 16, 2021, 7:02:11 AM",,Run,10,3000\n' +
+      '4,"x",,Ride,10,3000\n';
+
+    expect(readActivitiesCsv(text, NOW_MS)).toEqual({
+      ok: false,
+      reason: "dateFormat",
+    });
+  });
+
+  it("keeps the file when only some run dates are unreadable", () => {
+    const text =
+      `${HEADER}\n` +
+      '1,"14 mars 2021, 07:02:11",,Run,10,3000\n' +
+      '2,"Mar 15, 2021, 7:02:11 AM",,Run,10,3000\n';
+
+    expect(readFile(text).invalid.date).toBe(1);
+  });
 
   it("truncates long names to 200 characters", () => {
     const text = `${HEADER}\n1,"Mar 14, 2021, 7:02:11 AM",${"é".repeat(300)},Run,10,3000\n`;
@@ -409,18 +475,18 @@ describe("readActivitiesCsv", () => {
 
 describe("invalidReason", () => {
   it("accepts paces between 2 and 20 min/km", () => {
-    expect(invalidReason({ ...run, distanceM: 1000, movingTimeS: 120 })).toBe(
-      null,
-    );
-    expect(invalidReason({ ...run, distanceM: 1000, movingTimeS: 1200 })).toBe(
-      null,
-    );
-    expect(invalidReason({ ...run, distanceM: 1000, movingTimeS: 119 })).toBe(
-      "pace",
-    );
-    expect(invalidReason({ ...run, distanceM: 1000, movingTimeS: 1201 })).toBe(
-      "pace",
-    );
+    expect(
+      invalidReason({ ...run, distanceM: 1000, movingTimeS: 120 }, NOW_MS),
+    ).toBe(null);
+    expect(
+      invalidReason({ ...run, distanceM: 1000, movingTimeS: 1200 }, NOW_MS),
+    ).toBe(null);
+    expect(
+      invalidReason({ ...run, distanceM: 1000, movingTimeS: 119 }, NOW_MS),
+    ).toBe("pace");
+    expect(
+      invalidReason({ ...run, distanceM: 1000, movingTimeS: 1201 }, NOW_MS),
+    ).toBe("pace");
   });
 });
 
@@ -434,7 +500,7 @@ describe("validateImportedRun", () => {
       movingTimeS: 3000,
     };
 
-    expect(validateImportedRun(minimal)).toEqual({
+    expect(validateImportedRun(minimal, NOW_MS)).toEqual({
       ...minimal,
       name: "",
       elevationGainM: null,
@@ -443,13 +509,16 @@ describe("validateImportedRun", () => {
   });
 
   it("truncates the name", () => {
-    expect(validateImportedRun({ ...run, name: "x".repeat(250) })?.name).toBe(
-      "x".repeat(200),
-    );
+    expect(
+      validateImportedRun({ ...run, name: "x".repeat(250) }, NOW_MS)?.name,
+    ).toBe("x".repeat(200));
   });
 
   it("truncates the name by characters, without splitting an emoji", () => {
-    const name = validateImportedRun({ ...run, name: "🏃".repeat(250) })?.name;
+    const name = validateImportedRun(
+      { ...run, name: "🏃".repeat(250) },
+      NOW_MS,
+    )?.name;
 
     expect(name).toBe("🏃".repeat(200));
   });
@@ -461,17 +530,22 @@ describe("validateImportedRun", () => {
     "accepts an elevation of %j m and a heart rate of %j bpm",
     (elevationGainM, averageHeartrate) => {
       expect(
-        validateImportedRun({ ...run, elevationGainM, averageHeartrate }),
+        validateImportedRun(
+          { ...run, elevationGainM, averageHeartrate },
+          NOW_MS,
+        ),
       ).not.toBeNull();
     },
   );
 
   it("reads a null name as empty", () => {
-    expect(validateImportedRun({ ...run, name: null })?.name).toBe("");
+    expect(validateImportedRun({ ...run, name: null }, NOW_MS)?.name).toBe("");
   });
 
   it("drops the fields it does not know", () => {
-    expect(validateImportedRun({ ...run, description: "secret" })).toEqual(run);
+    expect(
+      validateImportedRun({ ...run, description: "secret" }, NOW_MS),
+    ).toEqual(run);
   });
 
   it.each([
@@ -510,8 +584,16 @@ describe("validateImportedRun", () => {
     ["an elevation above 20 000 m", { ...run, elevationGainM: 20000.5 }],
     ["a heart rate above 250", { ...run, averageHeartrate: 250.5 }],
     ["an array", [run]],
+    [
+      "a date after tomorrow",
+      { ...run, startDate: "2026-11-01T00:00:00.000Z" },
+    ],
+    [
+      "a distance above 500 km",
+      { ...run, distanceM: 500_001, movingTimeS: 300_000 },
+    ],
   ])("refuses %s", (_label, value) => {
-    expect(validateImportedRun(value)).toBeNull();
+    expect(validateImportedRun(value, NOW_MS)).toBeNull();
   });
 });
 

@@ -57,6 +57,10 @@ function uniqueById(runs: ImportedRun[]): ImportedRun[] {
   return [...new Map(runs.map((run) => [run.id, run])).values()];
 }
 
+function isForeignKeyError(err: unknown): boolean {
+  return err instanceof Error && /FOREIGN KEY/i.test(err.message);
+}
+
 export const historyRoutes = new Hono<AppEnv>();
 
 historyRoutes.post("/import", async (c) => {
@@ -71,7 +75,8 @@ historyRoutes.post("/import", async (c) => {
   if (rows === null) return c.json({ error: "invalid_body" }, 400);
   if (rows.length > IMPORT_BATCH_SIZE) return c.json(tooLarge, 413);
 
-  const validated = rows.map(validateImportedRun);
+  const nowMs = Date.now();
+  const validated = rows.map((row) => validateImportedRun(row, nowMs));
   const invalidRows = validated.flatMap((run, i) => (run === null ? [i] : []));
   if (invalidRows.length > 0) {
     return c.json({ error: "invalid_rows", invalidRows }, 400);
@@ -83,10 +88,17 @@ historyRoutes.post("/import", async (c) => {
   const db = c.env.DB;
   const userId = c.get("userId");
   const json = JSON.stringify(runs);
-  const [existing] = await db.batch<{ n: number }>([
-    db.prepare(COUNT_EXISTING).bind(userId, json),
-    db.prepare(UPSERT_RUNS).bind(userId, json),
-  ]);
+  let existing: D1Result<{ n: number }>;
+  try {
+    [existing] = await db.batch<{ n: number }>([
+      db.prepare(COUNT_EXISTING).bind(userId, json),
+      db.prepare(UPSERT_RUNS).bind(userId, json),
+    ]);
+  } catch (err) {
+    // Session encore valide d'un utilisateur supprimé : la clé étrangère refuse l'écriture.
+    if (isForeignKeyError(err)) return c.json({ error: "unauthorized" }, 401);
+    throw err;
+  }
   const alreadyPresent = existing.results[0]?.n ?? 0;
   const result: ImportResult = {
     inserted: runs.length - alreadyPresent,

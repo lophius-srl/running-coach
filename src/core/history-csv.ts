@@ -19,6 +19,10 @@ export const MAX_NAME_LENGTH = 200;
 // Allure plausible d'une course : entre 2 et 20 min/km.
 const MIN_PACE_S_PER_KM = 120;
 const MAX_PACE_S_PER_KM = 1200;
+// 500 km : au-delà de tout ultra-trail ; avec l'allure, borne aussi la durée (≤ 1 000 000 s).
+const MAX_DISTANCE_M = 500_000;
+// Tolérance d'un jour sur les dates futures (fuseaux, horloge de l'appareil).
+const FUTURE_TOLERANCE_MS = 24 * 60 * 60 * 1000;
 const MAX_ELEVATION_GAIN_M = 20000;
 const MAX_HEARTRATE = 250;
 
@@ -38,26 +42,47 @@ export type InvalidReason = "id" | "date" | "distance" | "duration" | "pace";
 export type HistoryFile = {
   runs: ImportedRun[]; // triées par date, dédoublonnées par id (la dernière ligne gagne)
   otherSports: number;
+  duplicates: number; // lignes d'une course déjà vue plus haut dans le fichier
   invalid: Record<InvalidReason, number>;
   firstDate: string | null;
   lastDate: string | null;
 };
 
+// Refus global du fichier, sans aperçu :
+// - missingColumns : colonnes requises absentes (pas un export Strava, ou export localisé) ;
+// - malformed : guillemet non fermé, qui avalerait en silence toute la suite du fichier ;
+// - dateFormat : plus de la moitié des dates de course illisibles (export dans une autre langue).
+export type ReadError =
+  | { reason: "missingColumns"; missingColumns: string[] }
+  | { reason: "malformed" }
+  | { reason: "dateFormat" };
+
 export type ReadResult =
-  { ok: true; file: HistoryFile } | { ok: false; missingColumns: string[] };
+  { ok: true; file: HistoryFile } | ({ ok: false } & ReadError);
 
 // Parseur RFC 4180 : guillemets doublés, virgules et retours à la ligne dans un champ, CRLF ou LF, BOM.
-export function parseCsv(text: string): string[][] {
+// `malformed` signale un guillemet mal placé : resté ouvert en fin de texte, ou fermant suivi
+// d'autre chose qu'une virgule ou une fin de ligne (fichier tronqué ou corrompu), qui avalerait
+// en silence les lignes suivantes.
+function tokenizeCsv(text: string): {
+  rows: string[][];
+  malformed: boolean;
+} {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
   let quoted = false;
+  let malformed = false;
   for (let i = text.charCodeAt(0) === 0xfeff ? 1 : 0; i < text.length; i++) {
     const char = text[i];
     if (quoted) {
       if (char !== '"') field += char;
       else if (text[i + 1] === '"') field += text[i++];
-      else quoted = false;
+      else {
+        quoted = false;
+        const next = text[i + 1];
+        if (next !== undefined && !",\r\n".includes(next)) malformed = true;
+      }
     } else if (char === '"' && field === "") quoted = true;
     else if (char === ",") {
       row.push(field);
@@ -69,8 +94,12 @@ export function parseCsv(text: string): string[][] {
       field = "";
     } else field += char;
   }
-  if (field !== "" || row.length > 0) rows.push([...row, field]);
-  return rows;
+  if (field !== "" || row.length > 0 || quoted) rows.push([...row, field]);
+  return { rows, malformed: malformed || quoted };
+}
+
+export function parseCsv(text: string): string[][] {
+  return tokenizeCsv(text).rows;
 }
 
 // « Type d'activité » → « typedactivite » : casse, accents, espaces et ponctuation ignorés.
@@ -181,10 +210,21 @@ function isHeartrate(value: number | null): boolean {
 }
 
 // Contrôle commun au navigateur et au Worker : motif du rejet, ou null si la course est valide.
-export function invalidReason(run: ImportedRun): InvalidReason | null {
+// `nowMs` en paramètre pour rester pur : une date au-delà de demain est refusée.
+export function invalidReason(
+  run: ImportedRun,
+  nowMs: number,
+): InvalidReason | null {
   if (!Number.isSafeInteger(run.id) || run.id <= 0) return "id";
   if (!isIsoUtc(run.startDate)) return "date";
-  if (!Number.isFinite(run.distanceM) || run.distanceM <= 0) return "distance";
+  if (Date.parse(run.startDate) > nowMs + FUTURE_TOLERANCE_MS) return "date";
+  if (
+    !Number.isFinite(run.distanceM) ||
+    run.distanceM <= 0 ||
+    run.distanceM > MAX_DISTANCE_M
+  ) {
+    return "distance";
+  }
   if (!Number.isSafeInteger(run.movingTimeS) || run.movingTimeS <= 0) {
     return "duration";
   }
@@ -205,7 +245,10 @@ function nullableNumber(value: unknown): number | null | undefined {
 }
 
 // Revalidation côté Worker d'une ligne reçue (JSON non fiable) ; null si elle est refusée.
-export function validateImportedRun(value: unknown): ImportedRun | null {
+export function validateImportedRun(
+  value: unknown,
+  nowMs: number,
+): ImportedRun | null {
   if (typeof value !== "object" || value === null) return null;
   const row = value as Record<string, unknown>;
   const elevationGainM = nullableNumber(row.elevationGainM ?? null);
@@ -235,7 +278,7 @@ export function validateImportedRun(value: unknown): ImportedRun | null {
     elevationGainM,
     averageHeartrate,
   };
-  return invalidReason(run) === null ? run : null;
+  return invalidReason(run, nowMs) === null ? run : null;
 }
 
 function readDistanceM(row: string[], positions: number[]): number {
@@ -253,12 +296,18 @@ function readSeconds(row: string[], positions: number[]): number {
   return Number.NaN;
 }
 
+// « 1,234 » est ambigu (1 234 à l'anglaise ou 1,234) : illisible pour un champ facultatif, qui
+// n'est pas rattrapé par le contrôle d'allure et serait stocké faux durablement.
+const AMBIGUOUS_THOUSANDS = /^\d{1,3},\d{3}$/;
+
 function readOptional(
   row: string[],
   positions: number[],
   isValid: (value: number) => boolean,
 ): number | null {
-  const value = parseDecimal(row[positions[positions.length - 1]]);
+  const cell = row[positions[positions.length - 1]]?.trim() ?? "";
+  if (AMBIGUOUS_THOUSANDS.test(cell)) return null;
+  const value = parseDecimal(cell);
   return value !== null && isValid(value) ? value : null;
 }
 
@@ -291,12 +340,21 @@ function isBlank(row: string[]): boolean {
   return row.length === 1 && row[0].trim() === "";
 }
 
-// Lit tout le fichier : courses valides, autres sports et lignes rejetées comptés par motif.
-export function readActivitiesCsv(text: string): ReadResult {
-  const [header = [], ...rows] = parseCsv(text);
+function sumOf(counts: Record<InvalidReason, number>): number {
+  return Object.values(counts).reduce((total, count) => total + count, 0);
+}
+
+// Lit tout le fichier : courses valides, autres sports, doublons et lignes rejetées par motif.
+export function readActivitiesCsv(text: string, nowMs: number): ReadResult {
+  const { rows: allRows, malformed } = tokenizeCsv(text);
+  if (malformed) return { ok: false, reason: "malformed" };
+  const firstLine = allRows.findIndex((row) => !isBlank(row));
+  const [header = [], ...rows] = firstLine < 0 ? [] : allRows.slice(firstLine);
   const columns = findColumns(header);
   const missing = missingColumns(columns);
-  if (missing.length > 0) return { ok: false, missingColumns: missing };
+  if (missing.length > 0) {
+    return { ok: false, reason: "missingColumns", missingColumns: missing };
+  }
 
   const runsById = new Map<number, ImportedRun>();
   const invalid: Record<InvalidReason, number> = {
@@ -307,6 +365,7 @@ export function readActivitiesCsv(text: string): ReadResult {
     pace: 0,
   };
   let otherSports = 0;
+  let duplicates = 0;
   for (const row of rows) {
     if (isBlank(row)) continue;
     const type = normalizeLabel(row[columns.type[0]] ?? "");
@@ -316,10 +375,15 @@ export function readActivitiesCsv(text: string): ReadResult {
       continue;
     }
     const run = toRun(row, columns, sportType);
-    const reason = invalidReason(run);
-    if (reason === null) runsById.set(run.id, run);
-    else invalid[reason]++;
+    const reason = invalidReason(run, nowMs);
+    if (reason !== null) invalid[reason]++;
+    else {
+      if (runsById.has(run.id)) duplicates++;
+      runsById.set(run.id, run);
+    }
   }
+  const runRows = runsById.size + duplicates + sumOf(invalid);
+  if (invalid.date > runRows / 2) return { ok: false, reason: "dateFormat" };
   const runs = [...runsById.values()].sort((a, b) =>
     a.startDate.localeCompare(b.startDate),
   );
@@ -328,6 +392,7 @@ export function readActivitiesCsv(text: string): ReadResult {
     file: {
       runs,
       otherSports,
+      duplicates,
       invalid,
       firstDate: runs[0]?.startDate ?? null,
       lastDate: runs[runs.length - 1]?.startDate ?? null,

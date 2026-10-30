@@ -26,7 +26,10 @@ const run = (id: number, name = `run ${id}`): ImportedRun => ({
 });
 
 function sampleRuns(): ImportedRun[] {
-  const result = readActivitiesCsv(ACTIVITIES_SAMPLE_CSV);
+  const result = readActivitiesCsv(
+    ACTIVITIES_SAMPLE_CSV,
+    Date.parse("2026-10-30T12:00:00.000Z"),
+  );
   if (!result.ok) throw new Error("invalid fixture");
   return result.file.runs;
 }
@@ -253,6 +256,10 @@ describe("POST /api/history/import", () => {
     ["a display label as sport type", { ...run(7), sportType: "Trail Run" }],
     ["another sport", { ...run(7), sportType: "Ride" }],
     ["an implausible pace", { ...run(7), movingTimeS: 100_000 }],
+    [
+      "a date in the future",
+      { ...run(7), startDate: "2099-01-01T00:00:00.000Z" },
+    ],
   ])("refuses a forged row with %s, even alone", async (_label, row) => {
     const response = await postRows([row]);
 
@@ -279,10 +286,10 @@ describe("POST /api/history/import", () => {
     expect(await storedRows()).toHaveLength(3);
   });
 
-  it("stores nothing for a session whose user no longer exists", async () => {
+  it("answers 401 and stores nothing for a session whose user no longer exists", async () => {
     const response = await postRows([run(7)], 99);
 
-    expect(response.ok).toBe(false);
+    expect(response.status).toBe(401);
     expect(await storedRows()).toEqual([]);
   });
 
