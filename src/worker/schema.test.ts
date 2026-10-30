@@ -1,8 +1,9 @@
 import { applyD1Migrations, env } from "cloudflare:test";
+import { resetDatabase } from "./test-db";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 // Contraintes du schéma initial (issue #9, ADR 0003).
-// Le stockage est isolé par test : chaque test repart du jeu de données de beforeEach.
+// Chaque test repart d'une base vide (resetDatabase), puis du jeu de données de son beforeEach.
 
 const DURABLE_TABLES = [
   "users",
@@ -53,6 +54,8 @@ async function seedUserWithEverything() {
 beforeAll(async () => {
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
 });
+
+beforeEach(() => resetDatabase(env.DB));
 
 describe("Bindings", () => {
   it("expose the D1 database as DB", () => {
