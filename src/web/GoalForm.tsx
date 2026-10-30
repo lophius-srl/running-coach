@@ -382,7 +382,13 @@ export function GoalForm() {
           </p>
         )}
       </form>
-      {paces && <Paces paces={paces} />}
+      {paces ? (
+        <Paces paces={paces} />
+      ) : (
+        <p className="muted paces-missing">
+          Renseigne un chrono de référence pour voir tes allures.
+        </p>
+      )}
     </section>
   );
 }

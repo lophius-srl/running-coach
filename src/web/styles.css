@@ -458,7 +458,8 @@ a {
 
 /* Allures d'entraînement */
 
-.paces-section {
+.paces-section,
+.paces-missing {
   margin-top: var(--space-5);
 }
 
