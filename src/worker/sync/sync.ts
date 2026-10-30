@@ -59,24 +59,27 @@ export async function syncUserActivities(
   );
   const fetchedAt = new Date(nowMs).toISOString();
   const db = env.DB;
-  const statements = [
-    ...runs.map((activity) =>
-      db
-        .prepare(
-          `INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (?, ?, ?, ?)
+  const upserts = runs.map((activity) =>
+    db
+      .prepare(
+        `INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (?, ?, ?, ?)
            ON CONFLICT (id) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at
            WHERE strava_activities.user_id = excluded.user_id`,
-        )
-        .bind(activity.id, userId, JSON.stringify(activity), fetchedAt),
-    ),
-    ...otherIds.map((id) =>
-      db
-        .prepare("DELETE FROM strava_activities WHERE id = ? AND user_id = ?")
-        .bind(id, userId),
-    ),
-  ];
-  if (statements.length > 0) await db.batch(statements);
-  return { imported: runs.length };
+      )
+      .bind(activity.id, userId, JSON.stringify(activity), fetchedAt),
+  );
+  const deletions = otherIds.map((id) =>
+    db
+      .prepare("DELETE FROM strava_activities WHERE id = ? AND user_id = ?")
+      .bind(id, userId),
+  );
+  if (upserts.length + deletions.length === 0) return { imported: 0 };
+  const results = await db.batch([...upserts, ...deletions]);
+  // L'upsert gardé par user_id n'écrit rien sur l'activité d'un autre utilisateur.
+  const imported = results
+    .slice(0, upserts.length)
+    .reduce((total, result) => total + result.meta.changes, 0);
+  return { imported };
 }
 
 // Même synchro pour le cron et le bouton : purge d'abord (indépendante de Strava), puis import.

@@ -221,9 +221,11 @@ describe("syncUserActivities", () => {
 
   it("never overwrites an activity owned by another user", async () => {
     await insertActivity(10, 2, "2026-10-29T04:00:00.000Z");
-    mockActivities([run(10)]);
+    mockActivities([run(10), run(12)]);
 
-    await syncUserActivities(testEnv, 1, NOW_MS);
+    expect(await syncUserActivities(testEnv, 1, NOW_MS)).toEqual({
+      imported: 1,
+    });
 
     expect(await storedActivities()).toEqual([
       {
@@ -231,6 +233,12 @@ describe("syncUserActivities", () => {
         user_id: 2,
         payload: "{}",
         fetched_at: "2026-10-29T04:00:00.000Z",
+      },
+      {
+        id: 12,
+        user_id: 1,
+        payload: JSON.stringify(run(12)),
+        fetched_at: "2026-10-30T04:00:00.000Z",
       },
     ]);
   });
