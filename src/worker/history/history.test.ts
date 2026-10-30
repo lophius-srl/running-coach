@@ -202,6 +202,150 @@ describe("POST /api/history/import", () => {
     },
   );
 
+  it("accepts a full batch of 200 runs with the longest escaped names", async () => {
+    const rows = Array.from({ length: 200 }, (_, i) => ({
+      ...run(16_000_000_000 + i, '"\\'.repeat(100)),
+      sportType: "VirtualRun",
+      distanceM: 10021.37,
+      elevationGainM: 19999.9,
+      averageHeartrate: 249.9,
+    }));
+
+    const response = await postRows(rows);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ inserted: 200, alreadyPresent: 0 });
+  });
+
+  it("accepts a body of exactly 256 KiB and refuses one more character", async () => {
+    const bodyOfLength = (length: number) => {
+      const empty = '{"rows":[],"p":""}';
+      return `{"rows":[],"p":"${"x".repeat(length - empty.length)}"}`;
+    };
+
+    expect((await postBody(bodyOfLength(256 * 1024))).status).toBe(200);
+    expect((await postBody(bodyOfLength(256 * 1024 + 1))).status).toBe(413);
+  });
+
+  it("refuses with 413 a declared Content-Length above 256 KiB", async () => {
+    const response = await app.request(
+      "https://coach.example/api/history/import",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": String(256 * 1024 + 1),
+          Cookie: await sessionCookie(1),
+        },
+        body: JSON.stringify({ rows: [run(1)] }),
+      },
+      testEnv,
+    );
+
+    expect(response.status).toBe(413);
+    expect(await storedRows()).toEqual([]);
+  });
+
+  it.each([
+    ["a string id", { ...run(7), id: "7" }],
+    ["a decimal id", { ...run(7), id: 7.5 }],
+    ["a non-ISO date", { ...run(7), startDate: "Mar 14, 2021, 7:02:11 AM" }],
+    ["a display label as sport type", { ...run(7), sportType: "Trail Run" }],
+    ["another sport", { ...run(7), sportType: "Ride" }],
+    ["an implausible pace", { ...run(7), movingTimeS: 100_000 }],
+  ])("refuses a forged row with %s, even alone", async (_label, row) => {
+    const response = await postRows([row]);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "invalid_rows",
+      invalidRows: [0],
+    });
+    expect(await storedRows()).toEqual([]);
+  });
+
+  it("stores a forged long name truncated to 200 characters", async () => {
+    await postRows([run(7, `  ${"n".repeat(500)}`)]);
+
+    expect(await storedRows()).toMatchObject([{ name: "n".repeat(200) }]);
+  });
+
+  it("counts exactly a batch mixing new runs, stored runs and in-batch duplicates", async () => {
+    await postRows([run(1), run(2)]);
+
+    const response = await postRows([run(1), run(1), run(3), run(3), run(2)]);
+
+    expect(await response.json()).toEqual({ inserted: 1, alreadyPresent: 2 });
+    expect(await storedRows()).toHaveLength(3);
+  });
+
+  it("stores nothing for a session whose user no longer exists", async () => {
+    const response = await postRows([run(7)], 99);
+
+    expect(response.ok).toBe(false);
+    expect(await storedRows()).toEqual([]);
+  });
+
+  it("does not count another user's run as already present", async () => {
+    await postRows([run(1), run(2)], 2);
+
+    const response = await postRows([run(1), run(2), run(3)], 1);
+
+    expect(await response.json()).toEqual({ inserted: 3, alreadyPresent: 0 });
+  });
+
+  it("does not overwrite another user's run with the same activity id", async () => {
+    await postRows([run(7, "à moi")], 2);
+
+    await postRows([run(7, "à l'autre")], 1);
+
+    expect(await storedRows()).toMatchObject([
+      { user_id: 1, name: "à l'autre" },
+      { user_id: 2, name: "à moi" },
+    ]);
+  });
+
+  it("writes any batch with the same 2 statements and 2 bound parameters each", async () => {
+    const statements: number[] = [];
+    const db = new Proxy(env.DB, {
+      get(target, prop) {
+        if (prop === "prepare") {
+          return (sql: string) => {
+            const statement = target.prepare(sql);
+            return {
+              bind: (...params: unknown[]) => {
+                statements.push(params.length);
+                return statement.bind(...params);
+              },
+            };
+          };
+        }
+        const value: unknown = Reflect.get(target, prop);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const send = async (rows: ImportedRun[]) =>
+      app.request(
+        "https://coach.example/api/history/import",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Cookie: await sessionCookie(1),
+          },
+          body: JSON.stringify({ rows }),
+        },
+        { ...testEnv, DB: db },
+      );
+
+    await send([run(1)]);
+    const small = statements.splice(0);
+    await send(Array.from({ length: 200 }, (_, i) => run(i + 1)));
+
+    expect(small).toEqual([2, 2]);
+    expect(statements).toEqual([2, 2]);
+  });
+
   it("accepts an empty batch", async () => {
     const response = await postRows([]);
 
@@ -219,6 +363,15 @@ describe("POST /api/history/import", () => {
       "SELECT id, payload FROM strava_activities",
     ).all();
     expect(strava.results).toEqual([{ id: 7, payload: "{}" }]);
+  });
+
+  it("does not create Strava activities", async () => {
+    await postRows(sampleRuns());
+
+    const strava = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM strava_activities",
+    ).first();
+    expect(strava).toEqual({ n: 0 });
   });
 });
 
@@ -239,5 +392,20 @@ describe("daily purge", () => {
     await runDailySync(testEnv, NOW_MS);
 
     expect(await storedRows()).toHaveLength(2);
+  });
+
+  it("purges the expired Strava copy of a run but keeps its imported version", async () => {
+    await env.DB.prepare(
+      "INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (7, 1, '{}', '2026-10-01T00:00:00.000Z')",
+    ).run();
+    await postRows([run(7)]);
+
+    await purgeExpiredActivities(env.DB, NOW_MS);
+
+    const strava = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM strava_activities",
+    ).first();
+    expect(strava).toEqual({ n: 0 });
+    expect(await storedRows()).toMatchObject([{ id: 7 }]);
   });
 });
