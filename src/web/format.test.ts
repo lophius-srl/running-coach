@@ -6,6 +6,7 @@ import {
   formatPace,
   formatPaceRange,
   formatRunName,
+  formatSpeedRange,
   formatStartDate,
   localIsoDate,
 } from "./format";
@@ -61,6 +62,15 @@ describe("formatPaceRange", () => {
   it("formats a range from the fastest to the slowest pace", () => {
     expect(formatPaceRange(305, 320)).toBe("5:05 – 5:20/km");
     expect(formatPaceRange(599.6, 605)).toBe("10:00 – 10:05/km");
+  });
+});
+
+describe("formatSpeedRange", () => {
+  it("converts a pace range to km/h, from the slowest to the fastest", () => {
+    // 5:00/km = 12 km/h ; 6:00/km = 10 km/h.
+    expect(formatSpeedRange(300, 360)).toBe("10,0 – 12,0 km/h");
+    // 5:05/km ≈ 11,80 km/h ; 5:11/km ≈ 11,58 km/h.
+    expect(formatSpeedRange(305, 311)).toBe("11,6 – 11,8 km/h");
   });
 });
 

@@ -494,6 +494,13 @@ a {
 .pace-zone dd {
   font-size: var(--font-size-lg);
   font-weight: 700;
+  text-align: right;
+}
+
+.pace-speed {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: 400;
 }
 
 @media (prefers-reduced-motion: reduce) {
