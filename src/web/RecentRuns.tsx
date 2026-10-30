@@ -17,15 +17,15 @@ function WeekTotal({ total }: { total: RecentRunsData["total"] }) {
     <>
       <h3 className="visually-hidden">Total de la semaine</h3>
       <dl className="key-figures">
-        <div className="key-figure">
+        <div className="card key-figure">
           <dt>Distance</dt>
           <dd>{formatDistance(total.distanceM)}</dd>
         </div>
-        <div className="key-figure">
+        <div className="card key-figure">
           <dt>Temps</dt>
           <dd>{formatDuration(total.movingTimeS)}</dd>
         </div>
-        <div className="key-figure">
+        <div className="card key-figure">
           <dt>Courses</dt>
           <dd>{total.count}</dd>
         </div>
@@ -37,7 +37,7 @@ function WeekTotal({ total }: { total: RecentRunsData["total"] }) {
 function RunCard({ run }: { run: RecentRunsData["runs"][number] }) {
   const startDate = formatStartDate(run.startDate);
   return (
-    <li className="run-card">
+    <li className="card run-card">
       <h3 className="run-name">{run.name || "Course sans titre"}</h3>
       <p className="muted">
         <time dateTime={run.startDate}>{startDate}</time>
@@ -82,7 +82,7 @@ export function RecentRuns({ data }: { data: RecentRunsData }) {
         Mes runs des 7 derniers jours
       </h2>
       {data.runs.length === 0 ? (
-        <div className="state state-empty">
+        <div className="card state state-empty">
           <p>Aucune course sur les 7 derniers jours.</p>
           <p className="muted">
             Appuie sur « Synchroniser maintenant » pour récupérer tes dernières

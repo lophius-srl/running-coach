@@ -56,7 +56,7 @@ async function fetchSession(): Promise<Session> {
 
 function Loading({ label }: { label: string }) {
   return (
-    <p className="state loading" role="status">
+    <p className="card state loading" role="status">
       <span className="spinner" aria-hidden="true" />
       {label}
     </p>
@@ -152,7 +152,7 @@ export function App() {
       <main>
         {session.status === "loading" && <Loading label="Chargement…" />}
         {session.status === "anonymous" && (
-          <section className="state">
+          <section className="card state">
             <p>
               Connecte ton compte Strava pour suivre tes courses de la semaine.
             </p>

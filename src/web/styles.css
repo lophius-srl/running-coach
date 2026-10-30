@@ -176,7 +176,9 @@ a {
   font-size: var(--font-size-lg);
 }
 
-.muted {
+.muted,
+.key-figure dt,
+.run-stats dt {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
 }
@@ -242,13 +244,18 @@ a {
   gap: var(--space-3);
 }
 
+/* Carte : surface commune aux états, chiffres clés et runs. */
+
+.card {
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
 /* États : chargement, vide, erreur */
 
 .state {
   padding: var(--space-4);
-  border: var(--border-width) solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
 }
 
 .state > * + * {
@@ -310,15 +317,7 @@ a {
   flex-direction: column-reverse;
   gap: var(--space-1);
   padding: var(--space-3) var(--space-2);
-  border: var(--border-width) solid var(--color-border-subtle);
   border-top: var(--accent-width) solid var(--color-strava);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-}
-
-.key-figure dt {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
 }
 
 .key-figure dd {
@@ -331,12 +330,6 @@ a {
 @media (min-width: 400px) {
   .key-figure dd {
     font-size: var(--font-size-lg);
-  }
-}
-
-@media (min-width: 480px) {
-  .key-figure dd {
-    font-size: var(--font-size-figure);
   }
 }
 
@@ -358,9 +351,6 @@ a {
 
 .run-card {
   padding: var(--space-4);
-  border: var(--border-width) solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
 }
 
 .run-name {
@@ -375,19 +365,18 @@ a {
   margin: var(--space-3) 0 var(--space-1);
 }
 
+.run-stats dd {
+  font-weight: 600;
+}
+
 @media (min-width: 480px) {
+  .key-figure dd {
+    font-size: var(--font-size-figure);
+  }
+
   .run-stats {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
-}
-
-.run-stats dt {
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-}
-
-.run-stats dd {
-  font-weight: 600;
 }
 
 @media (prefers-reduced-motion: reduce) {
