@@ -78,6 +78,7 @@ export function App() {
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     setSession({ status: "anonymous" });
+    setActivities({ status: "loading" });
   }
 
   async function synchronize() {
