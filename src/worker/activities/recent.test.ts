@@ -118,6 +118,18 @@ describe("summarizeRecentRuns", () => {
     expect(summary.runs.map((run) => run.id)).toEqual([1]);
   });
 
+  it("excludes runs starting in the future", () => {
+    const summary = summarizeRecentRuns(
+      [
+        payload({ id: 1, start_date: "2026-10-30T04:00:00Z" }), // maintenant
+        payload({ id: 2, start_date: "2026-10-30T04:00:01Z" }),
+      ],
+      NOW_MS,
+    );
+
+    expect(summary.runs.map((run) => run.id)).toEqual([1]);
+  });
+
   it("compares start dates as instants, whatever their UTC offset", () => {
     const summary = summarizeRecentRuns(
       [

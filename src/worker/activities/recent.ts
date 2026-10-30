@@ -70,7 +70,10 @@ export function summarizeRecentRuns(
   const runs = payloads
     .map(parseRun)
     .filter((run): run is RecentRun => run !== null)
-    .filter((run) => Date.parse(run.startDate) >= windowStart)
+    .filter((run) => {
+      const startMs = Date.parse(run.startDate);
+      return startMs >= windowStart && startMs <= nowMs;
+    })
     .sort(
       (a, b) =>
         Date.parse(b.startDate) - Date.parse(a.startDate) || b.id - a.id,
