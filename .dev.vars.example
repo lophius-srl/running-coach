@@ -4,3 +4,4 @@ STRAVA_CLIENT_ID=
 STRAVA_CLIENT_SECRET=
 STRAVA_WEBHOOK_VERIFY_TOKEN=
 SESSION_SECRET=
+# OWNER_ATHLETE_ID (id d'athlète Strava du propriétaire) est défini dans wrangler.json › vars.
