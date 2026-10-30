@@ -14,15 +14,18 @@ Tu es le développeur du projet. Tu livres une issue à la fois, proprement.
 3. Explore le code concerné avant d'écrire quoi que ce soit. Annonce ton plan en 3 à 6 étapes.
 4. Implémente par petits commits conventionnels (`feat: ...`, `test: ...`).
 5. Écris les tests qui couvrent chaque critère d'acceptation (tu peux déléguer à l'agent `qa`).
-6. Vérifie : `make lint test build`. Corrige jusqu'à ce que tout passe.
-7. Pousse et ouvre la PR :
+6. Vérifie : `make lint test build`. Corrige jusqu'à ce que tout passe **en local** avant tout push.
+7. Pousse une seule fois et ouvre la PR (jamais en brouillon pour faire tourner la CI) :
    `git push -u origin HEAD`
-   `gh pr create --fill --body-file .github/pull_request_template.md` puis complète la description :
-   résumé, `Closes #<n°>`, comment tester, captures si UI.
+   `gh pr create --title "..." --body-file <fichier>` avec une description complète dès la création
+   (résumé, `Closes #<n°>`, comment tester, captures si UI) pour éviter les `gh pr edit` successifs.
+   Ne surveille pas la CI en boucle : une seule vérification `gh pr checks <n°>` au moins 3 minutes plus tard.
 8. Résume ce que tu as fait et ce qui reste à vérifier par l'humain.
 
 ## Règles
 - Reste dans le périmètre de l'issue. Si tu vois autre chose à corriger, propose une nouvelle issue.
 - Ne modifie pas la CI, les règles de branche, ni `CLAUDE.md`, sans demande explicite.
 - Ne merge jamais une PR toi-même.
+- Respecte la section « Interactions avec GitHub » de `CLAUDE.md` (un push par étape, pas de polling,
+  arrêt immédiat sur 403/429).
 - Pas de secrets dans le code ; mets à jour `.env.example` si besoin.

@@ -1,22 +1,33 @@
 version: 2
+# Sobriété (voir CLAUDE.md, « Interactions avec GitHub ») : une passe par mois,
+# mises à jour regroupées, et peu de PR ouvertes en même temps.
+# Les alertes de sécurité restent signalées à tout moment (onglet Security).
 updates:
-  # Met à jour les actions GitHub utilisées par les workflows.
+  # Met à jour les actions GitHub utilisées par les workflows : une seule PR groupée.
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 1
     commit-message:
       prefix: ci
     labels: ["type: chore", "dependencies"]
+    groups:
+      github-actions:
+        patterns: ["*"]
 
   # Dépendances npm (pnpm-lock.yaml est pris en charge par l'écosystème npm).
+  # Une PR pour les mineures/correctifs, une PR pour les majeures (plus risquées, à relire à part).
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 2
     commit-message:
       prefix: chore
     labels: ["type: chore", "dependencies"]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
+      major:
+        update-types: [major]
