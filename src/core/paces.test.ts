@@ -28,14 +28,14 @@ function allPaces(paces: TrainingPaces): number[] {
   );
 }
 
-// Valeurs calculées par les formules de Daniels (s/km). Comparées aux tables VDOT de
-// « Daniels' Running Formula » : à ± 6 s/km près (seuil ≈ T, VMA encadre I, prédiction ≈ M).
+// Valeurs produites par les formules (s/km) ; T et I recoupés avec les valeurs de tables
+// citées dans paces.ts.
 describe("trainingPaces : cas de référence", () => {
   it("10 km en 50:00 (VDOT ≈ 40 ; tables : T 5:06, I 4:42, marathon 3:49:45)", () => {
     expect(vdot(10000, 3000)).toBeCloseTo(40, 1);
     expect(trainingPaces(sameDistance(10000, 3000))).toEqual({
-      endurance: range(351, 389), // 5:51 – 6:29
-      threshold: range(305, 320), // 5:05 – 5:20
+      endurance: range(367, 403), // 6:07 – 6:43
+      threshold: range(305, 311), // 5:05 – 5:11
       vma: range(276, 287), // 4:36 – 4:47
       race: range(297, 303), // 5:00 ± 1 %
       predictedTimeS: 3000,
@@ -47,8 +47,8 @@ describe("trainingPaces : cas de référence", () => {
   it("5 km en 20:00 (VDOT ≈ 50 ; tables : T 4:15, I 3:55)", () => {
     expect(vdot(5000, 1200)).toBeCloseTo(49.8, 1);
     expect(trainingPaces(sameDistance(5000, 1200))).toMatchObject({
-      endurance: range(294, 327), // 4:54 – 5:27
-      threshold: range(256, 268), // 4:16 – 4:28
+      endurance: range(308, 339), // 5:08 – 5:39
+      threshold: range(256, 261), // 4:16 – 4:21
       vma: range(231, 241), // 3:51 – 4:01
       race: range(238, 242), // 4:00 ± 1 %
       predictedTimeS: 1200,
@@ -58,8 +58,8 @@ describe("trainingPaces : cas de référence", () => {
   it("marathon en 3:30:00 (VDOT ≈ 44,6)", () => {
     expect(vdot(42195, 12600)).toBeCloseTo(44.55, 1);
     expect(trainingPaces(sameDistance(42195, 12600))).toMatchObject({
-      endurance: range(322, 357), // 5:22 – 5:57
-      threshold: range(280, 294), // 4:40 – 4:54
+      endurance: range(337, 371), // 5:37 – 6:11
+      threshold: range(280, 285), // 4:40 – 4:45
       vma: range(253, 263), // 4:13 – 4:23
       race: range(296, 302), // 4:59 ± 1 %
       predictedTimeS: 12600,
@@ -136,10 +136,10 @@ describe("trainingPaces : chrono visé irréaliste", () => {
 
   it("avertit au-delà de 5 %", () => {
     expect(atGap(0.0503)).toBe(
-      "Ton chrono visé est 5 % plus rapide que ce que prédit ta référence.",
-    ); // 2849 s
+      "Ton chrono visé est au moins 5 % plus rapide que ce que prédit ta référence. Un objectif réaliste serait autour de 50:00.",
+    ); // 2849 s, écart 5,03 %
     expect(atGap(0.08)).toBe(
-      "Ton chrono visé est 8 % plus rapide que ce que prédit ta référence.",
+      "Ton chrono visé est au moins 8 % plus rapide que ce que prédit ta référence. Un objectif réaliste serait autour de 50:00.",
     );
   });
 
@@ -298,7 +298,7 @@ describe("trainingPaces : avertissement entre distances différentes", () => {
 
   it("avertit juste au-delà de 5 % (13 085 s, écart 5,002 %)", () => {
     expect(marathonTarget(13085)).toBe(
-      "Ton chrono visé est 5 % plus rapide que ce que prédit ta référence.",
+      "Ton chrono visé est au moins 5 % plus rapide que ce que prédit ta référence. Un objectif réaliste serait autour de 3:49:34.",
     );
   });
 
@@ -310,13 +310,13 @@ describe("trainingPaces : avertissement entre distances différentes", () => {
   it("garde l'allure du chrono visé même quand il est jugé irréaliste", () => {
     const paces = trainingPaces({
       distanceM: 42195,
-      targetTimeS: 10800, // 3:00:00, ≈ 22 % plus rapide
+      targetTimeS: 10800, // 3:00:00, écart 21,6 %
       referenceDistanceM: 10000,
       referenceTimeS: 3000,
     });
     expect(paces.race).toEqual(range(253, 259)); // 4:16/km ± 1 %
     expect(paces.targetWarning).toBe(
-      "Ton chrono visé est 22 % plus rapide que ce que prédit ta référence.",
+      "Ton chrono visé est au moins 21 % plus rapide que ce que prédit ta référence. Un objectif réaliste serait autour de 3:49:34.",
     );
   });
 });

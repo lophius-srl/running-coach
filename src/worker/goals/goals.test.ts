@@ -297,18 +297,18 @@ describe("/api/goal", () => {
     expect(await getGoalOnly(1)).toEqual({ goal });
   });
 
-  // Référence 5 km en 23:00 (VDOT ≈ 42,6) → 10 km prédit en 47:42 ; visé 45:00 = 6 % plus rapide.
+  // Référence 5 km en 23:00 (VDOT ≈ 42,6) → 10 km prédit en 47:42 ; visé 45:00 = 5,7 % plus rapide.
   it("returns the paces computed from the reference with the goal", async () => {
     const saved = await putGoal(1, JSON.stringify(goal));
     const { paces } = await getGoal(1);
 
     expect(await saved.json()).toEqual({ goal, paces });
     expect(paces).toMatchObject({
-      threshold: { fastSPerKm: 292, slowSPerKm: 306 },
+      threshold: { fastSPerKm: 292, slowSPerKm: 298 },
       race: { fastSPerKm: 267, slowSPerKm: 273 },
       predictedTimeS: 2862,
       targetWarning:
-        "Ton chrono visé est 6 % plus rapide que ce que prédit ta référence.",
+        "Ton chrono visé est au moins 5 % plus rapide que ce que prédit ta référence. Un objectif réaliste serait autour de 47:42.",
     });
   });
 

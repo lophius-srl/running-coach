@@ -29,11 +29,14 @@ export type PaceInput = {
   referenceTimeS: number;
 };
 
-// Pourcentages du VDOT (Daniels) : E 59–74 %, resserré à 65–74 % pour coller aux fourchettes
-// de ses tables ; T 83–88 % ; I 95–100 % (≈ vVO2max, la « VMA »).
+// Pourcentages du VDOT. Daniels définit E à 59–74 % du VO2max ; on retient E 62–70 % et
+// T 86–88 %, calés pour retrouver E ≈ 5:07–5:38, T ≈ 4:15 et I ≈ 3:55 à VDOT 50 selon les tables
+// de « Daniels' Running Formula » (3e éd.), non vérifiées sur la source officielle (inaccessible).
+// I 95–100 % (≈ vVO2max, la « VMA ») encadre l'allure I publiée par V.O2 (news.vdoto2.com :
+// semi en 1:50 → ~4:39/km).
 export const ZONE_VDOT_SHARES = {
-  endurance: [0.65, 0.74],
-  threshold: [0.83, 0.88],
+  endurance: [0.62, 0.7],
+  threshold: [0.86, 0.88],
   vma: [0.95, 1],
 } as const;
 
@@ -89,11 +92,24 @@ function zone(score: number, [low, high]: readonly [number, number]) {
   };
 }
 
+// 2862 s → « 47:42 », 13 774 s → « 3:49:34 ».
+function formatTime(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  if (hours === 0) return `${minutes}:${seconds}`;
+  return `${hours}:${String(minutes).padStart(2, "0")}:${seconds}`;
+}
+
+// Écart arrondi par défaut, d'où « au moins » : 5,002 % s'affiche « au moins 5 % ».
 function targetWarning(targetTimeS: number | null, predictedTimeS: number) {
   if (targetTimeS === null) return null;
   const gap = (predictedTimeS - targetTimeS) / predictedTimeS;
   if (gap <= UNREALISTIC_TARGET_GAP) return null;
-  return `Ton chrono visé est ${Math.round(gap * 100)} % plus rapide que ce que prédit ta référence.`;
+  return (
+    `Ton chrono visé est au moins ${Math.floor(gap * 100)} % plus rapide que ce que prédit ` +
+    `ta référence. Un objectif réaliste serait autour de ${formatTime(predictedTimeS)}.`
+  );
 }
 
 export function trainingPaces(input: PaceInput): TrainingPaces {
