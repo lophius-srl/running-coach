@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { summarizeRecentRuns } from "./activities/recent";
 import { authRoutes } from "./auth/routes";
 import { readSession } from "./auth/session";
 import type { AppEnv, Bindings } from "./env";
@@ -48,6 +49,21 @@ app.post("/api/sync", async (c) => {
     if (err instanceof StravaError) return c.json({ error: "strava" }, 502);
     throw err;
   }
+});
+
+// Tableau de bord : courses des 7 derniers jours de l'utilisateur, sans le payload brut.
+app.get("/api/activities", async (c) => {
+  const { results } = await c.env.DB.prepare(
+    "SELECT payload FROM strava_activities WHERE user_id = ? ORDER BY id DESC",
+  )
+    .bind(c.get("userId"))
+    .all<{ payload: string }>();
+  return c.json(
+    summarizeRecentRuns(
+      results.map((row) => row.payload),
+      Date.now(),
+    ),
+  );
 });
 
 export { app };

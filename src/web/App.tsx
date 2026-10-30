@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import type { RecentRuns as RecentRunsData } from "../worker/activities/recent";
+import { RecentRuns } from "./RecentRuns";
 
 type Session =
   | { status: "loading" }
@@ -34,6 +36,21 @@ function syncMessage(sync: SyncState): string {
   }
 }
 
+type ActivitiesState =
+  | { status: "loading" }
+  | { status: "loaded"; data: RecentRunsData }
+  | { status: "failed" };
+
+async function fetchActivities(): Promise<ActivitiesState> {
+  const response = await fetch("/api/activities");
+  if (!response.ok) return { status: "failed" };
+  return { status: "loaded", data: (await response.json()) as RecentRunsData };
+}
+
+async function loadActivities(): Promise<ActivitiesState> {
+  return fetchActivities().catch((): ActivitiesState => ({ status: "failed" }));
+}
+
 async function fetchSession(): Promise<Session> {
   const response = await fetch("/api/me");
   if (!response.ok) return { status: "anonymous" };
@@ -44,6 +61,9 @@ async function fetchSession(): Promise<Session> {
 export function App() {
   const [session, setSession] = useState<Session>({ status: "loading" });
   const [sync, setSync] = useState<SyncState>({ status: "idle" });
+  const [activities, setActivities] = useState<ActivitiesState>({
+    status: "loading",
+  });
 
   useEffect(() => {
     fetchSession()
@@ -51,14 +71,23 @@ export function App() {
       .catch(() => setSession({ status: "anonymous" }));
   }, []);
 
+  useEffect(() => {
+    if (session.status === "connected") loadActivities().then(setActivities);
+  }, [session.status]);
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     setSession({ status: "anonymous" });
+    setActivities({ status: "loading" });
   }
 
   async function synchronize() {
     setSync({ status: "running" });
-    setSync(await requestSync().catch((): SyncState => ({ status: "failed" })));
+    const result = await requestSync().catch((): SyncState => ({
+      status: "failed",
+    }));
+    setSync(result);
+    if (result.status === "done") setActivities(await loadActivities());
   }
 
   return (
@@ -99,6 +128,12 @@ export function App() {
           </button>{" "}
           <span role="status">{syncMessage(sync)}</span>
         </p>
+      )}
+      {session.status === "connected" && activities.status === "loaded" && (
+        <RecentRuns data={activities.data} />
+      )}
+      {session.status === "connected" && activities.status === "failed" && (
+        <p role="alert">Impossible de charger tes courses récentes.</p>
       )}
     </main>
   );
