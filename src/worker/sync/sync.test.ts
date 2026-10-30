@@ -163,6 +163,126 @@ describe("syncUserActivities", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
+  it("stops after 3 pages even when the third one is full", async () => {
+    const fullPage = (start: number) =>
+      Array.from({ length: 100 }, (_, i) => run(start + i));
+    const fetchSpy = mockActivities(
+      fullPage(1000),
+      fullPage(2000),
+      fullPage(3000),
+      [run(9000)],
+    );
+
+    expect(await syncUserActivities(testEnv, 1, NOW_MS)).toEqual({
+      imported: 300,
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it("stores nothing when a later page fails", async () => {
+    const fullPage = Array.from({ length: 100 }, (_, i) => run(1000 + i));
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const page = new URL(String(input)).searchParams.get("page");
+      return page === "1"
+        ? Response.json(fullPage)
+        : new Response("{}", { status: 500 });
+    });
+
+    await expect(syncUserActivities(testEnv, 1, NOW_MS)).rejects.toBeInstanceOf(
+      StravaError,
+    );
+    expect(await storedActivities()).toEqual([]);
+  });
+
+  it.each([
+    ["an object", Response.json({ message: "oops" })],
+    ["invalid JSON", new Response("not json", { status: 200 })],
+  ])(
+    "keeps stored data and throws a StravaError when Strava returns %s",
+    async (_label, response) => {
+      await insertActivity(10, 1, "2026-10-29T04:00:00.000Z");
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
+
+      await expect(
+        syncUserActivities(testEnv, 1, NOW_MS),
+      ).rejects.toBeInstanceOf(StravaError);
+      expect(await storedActivities()).toHaveLength(1);
+    },
+  );
+
+  it("skips malformed items and stores the valid runs", async () => {
+    mockActivities([null, { sport_type: "Run" }, { id: "11" }, run(10)]);
+
+    expect(await syncUserActivities(testEnv, 1, NOW_MS)).toEqual({
+      imported: 1,
+    });
+    expect((await storedActivities()).map((a) => a.id)).toEqual([10]);
+  });
+
+  it("never overwrites an activity owned by another user", async () => {
+    await insertActivity(10, 2, "2026-10-29T04:00:00.000Z");
+    mockActivities([run(10)]);
+
+    await syncUserActivities(testEnv, 1, NOW_MS);
+
+    expect(await storedActivities()).toEqual([
+      {
+        id: 10,
+        user_id: 2,
+        payload: "{}",
+        fetched_at: "2026-10-29T04:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("never deletes an activity owned by another user", async () => {
+    await insertActivity(11, 2, "2026-10-29T04:00:00.000Z");
+    mockActivities([ride(11)]);
+
+    await syncUserActivities(testEnv, 1, NOW_MS);
+
+    expect((await storedActivities()).map((a) => [a.id, a.user_id])).toEqual([
+      [11, 2],
+    ]);
+  });
+
+  it("refreshes an expired token before fetching activities", async () => {
+    await env.DB.prepare(
+      "UPDATE oauth_tokens SET expires_at = 0 WHERE user_id = 1",
+    ).run();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input) =>
+        String(input).includes("/oauth/token")
+          ? Response.json({
+              access_token: "fresh",
+              refresh_token: "r2",
+              expires_at: 9999999999,
+            })
+          : Response.json([run(10)]),
+      );
+
+    await syncUserActivities(testEnv, 1, NOW_MS);
+
+    expect(tokenOf(fetchSpy.mock.calls[1][1])).toBe("Bearer fresh");
+    expect((await storedActivities()).map((a) => a.id)).toEqual([10]);
+  });
+
+  it("throws a StravaError and keeps stored data when the token refresh fails", async () => {
+    await env.DB.prepare(
+      "UPDATE oauth_tokens SET expires_at = 0 WHERE user_id = 1",
+    ).run();
+    await insertActivity(10, 1, "2026-10-29T04:00:00.000Z");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("{}", { status: 401 }),
+    );
+
+    await expect(syncUserActivities(testEnv, 1, NOW_MS)).rejects.toBeInstanceOf(
+      StravaError,
+    );
+    expect(await storedActivities()).toHaveLength(1);
+  });
+
   it("keeps stored data and throws a StravaError when Strava fails", async () => {
     await insertActivity(10, 1, "2026-10-29T04:00:00.000Z");
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
@@ -222,6 +342,18 @@ describe("runDailySync", () => {
     expect((await storedActivities()).map((a) => a.id)).toEqual([20]);
   });
 
+  it("only purges when no user is connected", async () => {
+    await env.DB.prepare("DELETE FROM oauth_tokens").run();
+    await insertActivity(1, 1, "2026-10-01T04:00:00.000Z");
+    await insertActivity(2, 1, "2026-10-29T04:00:00.000Z");
+    const fetchSpy = mockActivities([run(10)]);
+
+    await runDailySync(testEnv, NOW_MS);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect((await storedActivities()).map((a) => a.id)).toEqual([2]);
+  });
+
   it("is wired to the scheduled handler", async () => {
     await insertActivity(1, 1, "2026-10-01T04:00:00.000Z");
     mockActivities([run(10)]);
@@ -275,6 +407,43 @@ describe("POST /api/sync", () => {
     expect(tokenOf(fetchSpy.mock.calls[0][1])).toBe("Bearer token-2");
     const stored = await storedActivities();
     expect(stored.map((a) => [a.id, a.user_id])).toEqual([[10, 2]]);
+  });
+
+  it("keeps fresh activities of other users", async () => {
+    await insertActivity(20, 2, new Date(Date.now() - DAY_MS).toISOString());
+    mockActivities([run(10)]);
+
+    await postSync({ Cookie: await sessionCookie(1) });
+
+    expect((await storedActivities()).map((a) => [a.id, a.user_id])).toEqual([
+      [10, 1],
+      [20, 2],
+    ]);
+  });
+
+  it("does not sync on GET", async () => {
+    const fetchSpy = mockActivities([run(10)]);
+
+    const response = await app.request(
+      "https://coach.example/api/sync",
+      { headers: { Cookie: await sessionCookie(1) } },
+      testEnv,
+    );
+
+    expect(response.status).toBe(404);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  // BUG #11 : stravaApiFetch ne convertit pas l'erreur réseau de fetch en StravaError,
+  // la route répond 500 au lieu de 502. Repasser en `it` une fois corrigé.
+  it.fails("answers 502 when Strava is unreachable", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+      new TypeError("Network connection lost"),
+    );
+
+    const response = await postSync({ Cookie: await sessionCookie(1) });
+
+    expect(response.status).toBe(502);
   });
 
   it("answers 502 when Strava fails", async () => {
