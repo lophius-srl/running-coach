@@ -3,6 +3,7 @@ import {
   formatDistance,
   formatDuration,
   formatPace,
+  formatRunCount,
   formatStartDate,
 } from "./format";
 
@@ -37,8 +38,8 @@ export function RecentRuns({ data }: { data: RecentRunsData }) {
         <>
           <p>
             Total 7 jours : {formatDistance(data.total.distanceM)} en{" "}
-            {formatDuration(data.total.movingTimeS)} ({data.total.count}{" "}
-            course(s))
+            {formatDuration(data.total.movingTimeS)} (
+            {formatRunCount(data.total.count)})
           </p>
           <table aria-labelledby={HEADING_ID}>
             <thead>

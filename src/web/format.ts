@@ -37,3 +37,8 @@ export function formatStartDate(iso: string, timeZone?: string): string {
     timeZone,
   });
 }
+
+// « 1 course », « 3 courses » (0 et 1 au singulier, comme en français).
+export function formatRunCount(count: number): string {
+  return `${count} ${count > 1 ? "courses" : "course"}`;
+}
