@@ -147,3 +147,176 @@ describe("trainingPaces : chrono visé irréaliste", () => {
     expect(trainingPaces(sameDistance(10000, 3000)).targetWarning).toBeNull();
   });
 });
+
+// Bornes acceptées par validateGoal : record du monde … 15 min/km, sur chaque distance.
+const DISTANCES_M = [5000, 10000, 21098, 42195];
+const WORLD_RECORDS_S: Record<number, number> = {
+  5000: 755,
+  10000: 1571,
+  21098: 3402,
+  42195: 7235,
+};
+const slowestTimeS = (distanceM: number) => Math.floor(distanceM * 0.9);
+
+// Chronos de référence du record du monde à 15 min/km, en 12 paliers.
+function referenceTimes(distanceM: number): number[] {
+  const fastest = WORLD_RECORDS_S[distanceM];
+  const step = (slowestTimeS(distanceM) - fastest) / 12;
+  return Array.from({ length: 13 }, (_, i) => Math.round(fastest + i * step));
+}
+
+function zonesInOrder(paces: TrainingPaces) {
+  return [paces.vma, paces.threshold, paces.endurance];
+}
+
+describe("trainingPaces : déterminisme et domaine de saisie", () => {
+  it("renvoie le même résultat pour la même saisie, sans la modifier", () => {
+    const input: PaceInput = {
+      distanceM: 42195,
+      targetTimeS: 13500,
+      referenceDistanceM: 10000,
+      referenceTimeS: 3000,
+    };
+    const frozen = Object.freeze({ ...input });
+
+    expect(trainingPaces(frozen)).toEqual(trainingPaces(input));
+    expect(input).toEqual(frozen);
+  });
+
+  it.each(DISTANCES_M)(
+    "ralentit chaque allure et la prédiction quand la référence sur %i m ralentit",
+    (referenceDistanceM) => {
+      const results = referenceTimes(referenceDistanceM).map((referenceTimeS) =>
+        trainingPaces({
+          distanceM: 21098,
+          targetTimeS: null,
+          referenceDistanceM,
+          referenceTimeS,
+        }),
+      );
+      for (let i = 1; i < results.length; i++) {
+        const slower = allPaces(results[i]);
+        allPaces(results[i - 1]).forEach((pace, index) =>
+          expect(pace).toBeLessThan(slower[index]),
+        );
+        expect(results[i].predictedTimeS).toBeGreaterThan(
+          results[i - 1].predictedTimeS,
+        );
+      }
+    },
+  );
+
+  it.each(DISTANCES_M)(
+    "garde VMA < seuil < endurance et rapide < lente sur tout le domaine (référence %i m)",
+    (referenceDistanceM) => {
+      for (const referenceTimeS of referenceTimes(referenceDistanceM)) {
+        const paces = trainingPaces(
+          sameDistance(referenceDistanceM, referenceTimeS),
+        );
+        const zones = zonesInOrder(paces);
+        for (const zone of [...zones, paces.race]) {
+          expect(zone.fastSPerKm).toBeLessThan(zone.slowSPerKm);
+        }
+        for (let i = 1; i < zones.length; i++) {
+          expect(zones[i - 1].slowSPerKm).toBeLessThan(zones[i].fastSPerKm);
+        }
+      }
+    },
+  );
+
+  // La dichotomie doit converger à l'intérieur de [1 min, 50 h], pour toute paire de distances.
+  it.each(
+    DISTANCES_M.flatMap((referenceDistanceM) =>
+      DISTANCES_M.flatMap((distanceM) =>
+        [
+          WORLD_RECORDS_S[referenceDistanceM],
+          slowestTimeS(referenceDistanceM),
+        ].map((referenceTimeS) => ({
+          referenceDistanceM,
+          referenceTimeS,
+          distanceM,
+        })),
+      ),
+    ),
+  )(
+    "prédit un chrono fini et cohérent : référence $referenceDistanceM m en $referenceTimeS s → $distanceM m",
+    ({ referenceDistanceM, referenceTimeS, distanceM }) => {
+      const score = vdot(referenceDistanceM, referenceTimeS);
+      const predicted = predictTimeS(score, distanceM);
+
+      expect(Number.isSafeInteger(predicted)).toBe(true);
+      expect(predicted).toBeGreaterThan(60);
+      expect(predicted).toBeLessThan(3000 * 60);
+      expect(vdot(distanceM, predicted)).toBeCloseTo(score, 1);
+      const paces = trainingPaces({
+        distanceM,
+        targetTimeS: null,
+        referenceDistanceM,
+        referenceTimeS,
+      });
+      for (const pace of allPaces(paces)) {
+        expect(Number.isSafeInteger(pace) && pace > 0).toBe(true);
+      }
+    },
+  );
+
+  it("prédit un chrono plus long sur une distance plus longue", () => {
+    const score = vdot(10000, 3000);
+    const predictions = DISTANCES_M.map((distanceM) =>
+      predictTimeS(score, distanceM),
+    );
+    expect(predictions).toEqual([...predictions].sort((a, b) => a - b));
+    expect(new Set(predictions).size).toBe(DISTANCES_M.length);
+  });
+});
+
+// Source publiée (V.O2 / Jack Daniels, « What's your interval pace? », 05/02/2013,
+// news.vdoto2.com) : semi en 1:50 → allure I « roughly 7:29 per mile » ≈ 4:39/km.
+describe("trainingPaces : calage sur une valeur publiée par Daniels", () => {
+  it("encadre l'allure I officielle d'un semi en 1:50:00 dans la zone VMA", () => {
+    const officialIntervalSPerKm = Math.round((7 * 60 + 29) / 1.609344); // 279 s
+    const { vma } = trainingPaces(sameDistance(21098, 6600));
+
+    expect(vma.fastSPerKm).toBeLessThanOrEqual(officialIntervalSPerKm);
+    expect(vma.slowSPerKm).toBeGreaterThanOrEqual(officialIntervalSPerKm);
+  });
+});
+
+describe("trainingPaces : avertissement entre distances différentes", () => {
+  // Référence 10 km en 50:00 → marathon prédit en 13 774 s ; 5 % plus rapide = 13 085,3 s.
+  const marathonTarget = (targetTimeS: number | null) =>
+    trainingPaces({
+      distanceM: 42195,
+      targetTimeS,
+      referenceDistanceM: 10000,
+      referenceTimeS: 3000,
+    }).targetWarning;
+
+  it("n'avertit pas juste en deçà de 5 % (13 086 s, écart 4,998 %)", () => {
+    expect(marathonTarget(13086)).toBeNull();
+  });
+
+  it("avertit juste au-delà de 5 % (13 085 s, écart 5,002 %)", () => {
+    expect(marathonTarget(13085)).toBe(
+      "Ton chrono visé est 5 % plus rapide que ce que prédit ta référence.",
+    );
+  });
+
+  it("n'avertit pas pour un chrono visé égal ou plus lent que la prédiction", () => {
+    expect(marathonTarget(13774)).toBeNull();
+    expect(marathonTarget(16200)).toBeNull();
+  });
+
+  it("garde l'allure du chrono visé même quand il est jugé irréaliste", () => {
+    const paces = trainingPaces({
+      distanceM: 42195,
+      targetTimeS: 10800, // 3:00:00, ≈ 22 % plus rapide
+      referenceDistanceM: 10000,
+      referenceTimeS: 3000,
+    });
+    expect(paces.race).toEqual(range(253, 259)); // 4:16/km ± 1 %
+    expect(paces.targetWarning).toBe(
+      "Ton chrono visé est 22 % plus rapide que ce que prédit ta référence.",
+    );
+  });
+});

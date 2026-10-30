@@ -12,7 +12,7 @@ import { generateSignedCookie } from "hono/cookie";
 import { app } from "../index";
 import type { Bindings } from "../env";
 import { resetDatabase } from "../test-db";
-import type { TrainingPaces } from "../../core/paces";
+import { trainingPaces, type TrainingPaces } from "../../core/paces";
 import type { Goal } from "./rules";
 
 const testEnv: Bindings = { ...env, SESSION_SECRET: "session-secret" };
@@ -320,5 +320,39 @@ describe("/api/goal", () => {
     ).run();
 
     expect((await getGoal(1)).paces).toBeNull();
+  });
+
+  it("returns each user's own paces only", async () => {
+    const marathon = { ...goal, distanceM: 42195, targetTimeS: null };
+    await putGoal(1, JSON.stringify(goal));
+
+    expect((await getGoal(2)).paces).toBeNull();
+
+    await putGoal(2, JSON.stringify(marathon));
+
+    expect((await getGoal(1)).paces).toEqual(trainingPaces(goal));
+    expect((await getGoal(2)).paces).toEqual(trainingPaces(marathon));
+  });
+
+  it("recomputes the paces after the reference is replaced", async () => {
+    const faster = { ...goal, referenceTimeS: 1200 };
+    await putGoal(1, JSON.stringify(goal));
+    await putGoal(1, JSON.stringify(faster));
+
+    expect((await getGoal(1)).paces).toEqual(trainingPaces(faster));
+  });
+
+  // ADR 0003 : aucune donnée Strava n'entre dans le calcul des allures.
+  it("ignores the user's Strava activities when computing paces", async () => {
+    await putGoal(1, JSON.stringify(goal));
+    const before = (await getGoal(1)).paces;
+    await env.DB.prepare(
+      "INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (1, 1, ?, '2026-10-30T08:00:00.000Z')",
+    )
+      .bind(JSON.stringify({ type: "Run", distance: 10000, moving_time: 2400 }))
+      .run();
+
+    expect((await getGoal(1)).paces).toEqual(before);
+    expect(before).toEqual(trainingPaces(goal));
   });
 });
