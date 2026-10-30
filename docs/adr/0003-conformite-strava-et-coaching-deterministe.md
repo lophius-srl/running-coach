@@ -42,6 +42,8 @@ Option 1.
 
 ## Conséquences
 - Pas d'historique Strava au-delà de 7 jours : les tendances longues dépendent de la décision sur les agrégats.
+- **Amendement (ADR 0004)** : les données importées par l'utilisateur depuis son export de compte Strava
+  relèvent du régime durable (table `imported_activities`) ; la purge à 7 jours ne s'applique qu'à `strava_activities`.
 - Toute fonctionnalité qui enverrait des données Strava à un LLM doit être refusée en review.
 - **Points ouverts** :
   - Conserver des agrégats dérivés (VMA, charge, records) est-il compatible avec §5.5 et §6.2 ? À valider
