@@ -12,6 +12,7 @@ import { generateSignedCookie } from "hono/cookie";
 import { app } from "../index";
 import type { Bindings } from "../env";
 import { resetDatabase } from "../test-db";
+import { trainingPaces, type TrainingPaces } from "../../core/paces";
 import type { Goal } from "./rules";
 
 const testEnv: Bindings = { ...env, SESSION_SECRET: "session-secret" };
@@ -58,7 +59,13 @@ async function getGoal(userId: number) {
     { headers: { Cookie: await sessionCookie(userId) } },
     testEnv,
   );
-  return response.json<{ goal: Goal | null }>();
+  return response.json<{ goal: Goal | null; paces: TrainingPaces | null }>();
+}
+
+// Objectif seul, pour comparer sans les allures.
+async function getGoalOnly(userId: number) {
+  const { goal } = await getGoal(userId);
+  return { goal };
 }
 
 async function putGoal(userId: number, body: string) {
@@ -101,14 +108,14 @@ describe("/api/goal", () => {
   });
 
   it("returns null when no goal is saved", async () => {
-    expect(await getGoal(1)).toEqual({ goal: null });
+    expect(await getGoalOnly(1)).toEqual({ goal: null });
   });
 
   it("saves a goal and returns it on the next load", async () => {
     const response = await putGoal(1, JSON.stringify(goal));
 
     expect(response.status).toBe(200);
-    expect(await getGoal(1)).toEqual({ goal });
+    expect(await getGoalOnly(1)).toEqual({ goal });
   });
 
   it("replaces the active goal instead of adding one, keeping its plans", async () => {
@@ -122,7 +129,7 @@ describe("/api/goal", () => {
     await putGoal(1, JSON.stringify(marathon));
 
     expect(await goalRows()).toEqual([{ id, user_id: 1 }]);
-    expect(await getGoal(1)).toEqual({ goal: marathon });
+    expect(await getGoalOnly(1)).toEqual({ goal: marathon });
     const plans = await env.DB.prepare(
       "SELECT COUNT(*) AS n FROM plans",
     ).first<{
@@ -162,7 +169,9 @@ describe("/api/goal", () => {
     const response = await putGoal(1, JSON.stringify(withoutTarget));
 
     expect(response.status).toBe(200);
-    expect(await getGoal(1)).toEqual({ goal: { ...goal, targetTimeS: null } });
+    expect(await getGoalOnly(1)).toEqual({
+      goal: { ...goal, targetTimeS: null },
+    });
   });
 
   it("rejects a malformed JSON body", async () => {
@@ -185,7 +194,7 @@ describe("/api/goal", () => {
     await putGoal(1, JSON.stringify({ ...goal, userId: 2, user_id: 2 }));
 
     expect(await goalRows()).toEqual([{ id: expect.any(Number), user_id: 1 }]);
-    expect(await getGoal(2)).toEqual({ goal: null });
+    expect(await getGoalOnly(2)).toEqual({ goal: null });
   });
 
   it("returns the saved goal with its days sorted", async () => {
@@ -194,7 +203,7 @@ describe("/api/goal", () => {
       JSON.stringify({ ...goal, availableDays: [6, 2, 4] }),
     );
 
-    expect(await response.json()).toEqual({ goal });
+    expect(await response.json()).toMatchObject({ goal });
     expect((await getGoal(1)).goal?.availableDays).toEqual([2, 4, 6]);
   });
 
@@ -207,7 +216,7 @@ describe("/api/goal", () => {
     );
 
     expect(response.status).toBe(400);
-    expect(await getGoal(1)).toEqual({ goal });
+    expect(await getGoalOnly(1)).toEqual({ goal });
   });
 
   it("touches updated_at but keeps created_at when replacing", async () => {
@@ -264,7 +273,7 @@ describe("/api/goal", () => {
       "INSERT INTO goals (user_id, race_date, distance_m, available_days) VALUES (1, '2027-04-11', 10000, '[1,3]')",
     ).run();
 
-    expect(await getGoal(1)).toEqual({
+    expect(await getGoalOnly(1)).toEqual({
       goal: {
         distanceM: 10000,
         raceDate: "2027-04-11",
@@ -285,6 +294,65 @@ describe("/api/goal", () => {
     await putGoal(1, JSON.stringify(goal));
 
     expect(await goalRows()).toEqual([{ id, user_id: 1 }]);
-    expect(await getGoal(1)).toEqual({ goal });
+    expect(await getGoalOnly(1)).toEqual({ goal });
+  });
+
+  // Référence 5 km en 23:00 (VDOT ≈ 42,6) → 10 km prédit en 47:42 ; visé 45:00 = 5,7 % plus rapide.
+  it("returns the paces computed from the reference with the goal", async () => {
+    const saved = await putGoal(1, JSON.stringify(goal));
+    const { paces } = await getGoal(1);
+
+    expect(await saved.json()).toEqual({ goal, paces });
+    expect(paces).toMatchObject({
+      threshold: { fastSPerKm: 292, slowSPerKm: 298 },
+      race: { fastSPerKm: 267, slowSPerKm: 273 },
+      predictedTimeS: 2862,
+      targetWarning:
+        "Ton chrono visé est au moins 5 % plus rapide que ce que prédit ta référence. Un objectif réaliste serait autour de 47:42.",
+    });
+  });
+
+  it("returns no paces without a goal or without a reference", async () => {
+    expect((await getGoal(1)).paces).toBeNull();
+
+    await env.DB.prepare(
+      "INSERT INTO goals (user_id, race_date, distance_m) VALUES (1, '2027-04-11', 10000)",
+    ).run();
+
+    expect((await getGoal(1)).paces).toBeNull();
+  });
+
+  it("returns each user's own paces only", async () => {
+    const marathon = { ...goal, distanceM: 42195, targetTimeS: null };
+    await putGoal(1, JSON.stringify(goal));
+
+    expect((await getGoal(2)).paces).toBeNull();
+
+    await putGoal(2, JSON.stringify(marathon));
+
+    expect((await getGoal(1)).paces).toEqual(trainingPaces(goal));
+    expect((await getGoal(2)).paces).toEqual(trainingPaces(marathon));
+  });
+
+  it("recomputes the paces after the reference is replaced", async () => {
+    const faster = { ...goal, referenceTimeS: 1200 };
+    await putGoal(1, JSON.stringify(goal));
+    await putGoal(1, JSON.stringify(faster));
+
+    expect((await getGoal(1)).paces).toEqual(trainingPaces(faster));
+  });
+
+  // ADR 0003 : aucune donnée Strava n'entre dans le calcul des allures.
+  it("ignores the user's Strava activities when computing paces", async () => {
+    await putGoal(1, JSON.stringify(goal));
+    const before = (await getGoal(1)).paces;
+    await env.DB.prepare(
+      "INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (1, 1, ?, '2026-10-30T08:00:00.000Z')",
+    )
+      .bind(JSON.stringify({ type: "Run", distance: 10000, moving_time: 2400 }))
+      .run();
+
+    expect((await getGoal(1)).paces).toEqual(before);
+    expect(before).toEqual(trainingPaces(goal));
   });
 });

@@ -4,6 +4,7 @@ import {
   formatDuration,
   formatHeartrate,
   formatPace,
+  formatPaceRange,
   formatRunName,
   formatStartDate,
   localIsoDate,
@@ -53,6 +54,13 @@ describe("formatPace", () => {
 
   it("shows a dash when the pace is unknown", () => {
     expect(formatPace(null)).toBe("–");
+  });
+});
+
+describe("formatPaceRange", () => {
+  it("formats a range from the fastest to the slowest pace", () => {
+    expect(formatPaceRange(305, 320)).toBe("5:05 – 5:20/km");
+    expect(formatPaceRange(599.6, 605)).toBe("10:00 – 10:05/km");
   });
 });
 

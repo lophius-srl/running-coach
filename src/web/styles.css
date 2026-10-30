@@ -456,6 +456,46 @@ a {
   margin: 0;
 }
 
+/* Allures d'entraînement */
+
+.paces-section,
+.paces-missing {
+  margin-top: var(--space-5);
+}
+
+.paces {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.pace-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.pace-zone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--border-width) solid var(--color-border-subtle);
+}
+
+.pace-zone dt {
+  font-weight: 600;
+}
+
+.pace-zone dd {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

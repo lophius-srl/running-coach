@@ -19,11 +19,20 @@ export function formatDuration(totalSeconds: number): string {
   return `${hours}:${pad2(minutes)}:${pad2(seconds % 60)}`;
 }
 
+function paceClock(secondsPerKm: number): string {
+  const seconds = Math.round(secondsPerKm);
+  return `${Math.floor(seconds / 60)}:${pad2(seconds % 60)}`;
+}
+
 // Allure en m:ss/km, arrondie à la seconde ; « – » si inconnue (distance nulle).
 export function formatPace(secondsPerKm: number | null): string {
   if (secondsPerKm === null) return "–";
-  const seconds = Math.round(secondsPerKm);
-  return `${Math.floor(seconds / 60)}:${pad2(seconds % 60)}/km`;
+  return `${paceClock(secondsPerKm)}/km`;
+}
+
+// Fourchette d'allures, de la plus rapide à la plus lente : « 5:05 – 5:20/km ».
+export function formatPaceRange(fastSPerKm: number, slowSPerKm: number) {
+  return `${paceClock(fastSPerKm)} – ${paceClock(slowSPerKm)}/km`;
 }
 
 // Date et heure de départ, dans le fuseau du navigateur par défaut.

@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
+import { trainingPaces, type TrainingPaces } from "../../core/paces";
 import { utcIsoDate, validateGoal, type SavedGoal } from "./rules";
 
 type GoalRow = {
@@ -21,6 +22,13 @@ function toSavedGoal(row: GoalRow): SavedGoal {
     referenceTimeS: row.reference_time_s,
     availableDays: Array.isArray(days) ? days : [],
   };
+}
+
+// Allures calculées à la volée depuis la saisie (aucune donnée Strava) ; null sans référence.
+function pacesFor(goal: SavedGoal): TrainingPaces | null {
+  const { referenceDistanceM, referenceTimeS } = goal;
+  if (referenceDistanceM === null || referenceTimeS === null) return null;
+  return trainingPaces({ ...goal, referenceDistanceM, referenceTimeS });
 }
 
 // Un seul objectif par utilisateur (index unique goals.user_id) : l'upsert met à jour la ligne
@@ -46,7 +54,8 @@ goalRoutes.get("/", async (c) => {
   )
     .bind(c.get("userId"))
     .first<GoalRow>();
-  return c.json({ goal: row ? toSavedGoal(row) : null });
+  const goal = row ? toSavedGoal(row) : null;
+  return c.json({ goal, paces: goal ? pacesFor(goal) : null });
 });
 
 goalRoutes.put("/", async (c) => {
@@ -66,5 +75,5 @@ goalRoutes.put("/", async (c) => {
       JSON.stringify(goal.availableDays),
     )
     .run();
-  return c.json({ goal });
+  return c.json({ goal, paces: pacesFor(goal) });
 });
