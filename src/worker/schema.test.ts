@@ -11,6 +11,7 @@ const DURABLE_TABLES = [
   "goals",
   "plans",
   "plan_sessions",
+  "imported_activities",
 ];
 const EPHEMERAL_TABLES = ["strava_activities"];
 
@@ -47,6 +48,9 @@ async function seedUserWithEverything() {
     ),
     env.DB.prepare(
       "INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (100, 1, '{}', '2026-10-29T08:00:00.000Z')",
+    ),
+    env.DB.prepare(
+      "INSERT INTO imported_activities (user_id, id, start_date, sport_type, distance_m, moving_time_s) VALUES (1, 100, '2021-03-14T07:02:11.000Z', 'Run', 10000, 3000)",
     ),
   ]);
 }
