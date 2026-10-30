@@ -1,13 +1,11 @@
 name: Claude Code Review
 
-# Relecture automatique de chaque PR par Claude (en plus de ta propre relecture).
+# Relecture par Claude dans GitHub, À LA DEMANDE uniquement (onglet Actions → "Claude Code Review" → Run workflow).
+# La review se fait déjà en local par l'agent `reviewer` avant le push : pas de relecture automatique
+# à chaque PR, pour limiter l'activité automatisée sur le compte (voir CLAUDE.md, « Interactions avec GitHub »).
 # Prérequis : secret CLAUDE_CODE_OAUTH_TOKEN (généré avec `claude setup-token`) et l'app GitHub Claude installée.
-# Chaque review consomme des minutes GitHub Actions et ton quota d'abonnement Claude.
 
 on:
-  pull_request:
-    types: [opened, ready_for_review, reopened]
-  # Relecture à la demande : onglet Actions → "Claude Code Review" → Run workflow
   workflow_dispatch:
     inputs:
       pr_number:
