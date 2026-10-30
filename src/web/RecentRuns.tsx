@@ -14,20 +14,23 @@ const HEADING_ID = "recent-runs-title";
 
 function WeekTotal({ total }: { total: RecentRunsData["total"] }) {
   return (
-    <dl className="key-figures" aria-label="Total des 7 derniers jours">
-      <div className="key-figure">
-        <dt>Distance</dt>
-        <dd>{formatDistance(total.distanceM)}</dd>
-      </div>
-      <div className="key-figure">
-        <dt>Temps</dt>
-        <dd>{formatDuration(total.movingTimeS)}</dd>
-      </div>
-      <div className="key-figure">
-        <dt>Courses</dt>
-        <dd>{total.count}</dd>
-      </div>
-    </dl>
+    <>
+      <h3 className="visually-hidden">Total de la semaine</h3>
+      <dl className="key-figures">
+        <div className="key-figure">
+          <dt>Distance</dt>
+          <dd>{formatDistance(total.distanceM)}</dd>
+        </div>
+        <div className="key-figure">
+          <dt>Temps</dt>
+          <dd>{formatDuration(total.movingTimeS)}</dd>
+        </div>
+        <div className="key-figure">
+          <dt>Courses</dt>
+          <dd>{total.count}</dd>
+        </div>
+      </dl>
+    </>
   );
 }
 
