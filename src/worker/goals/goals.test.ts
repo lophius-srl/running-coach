@@ -155,6 +155,16 @@ describe("/api/goal", () => {
     expect(await goalRows()).toEqual([]);
   });
 
+  it("saves a goal sent without targetTimeS as having no target", async () => {
+    const withoutTarget: Partial<Goal> = { ...goal };
+    delete withoutTarget.targetTimeS;
+
+    const response = await putGoal(1, JSON.stringify(withoutTarget));
+
+    expect(response.status).toBe(200);
+    expect(await getGoal(1)).toEqual({ goal: { ...goal, targetTimeS: null } });
+  });
+
   it("rejects a malformed JSON body", async () => {
     const response = await putGoal(1, "{oops");
 

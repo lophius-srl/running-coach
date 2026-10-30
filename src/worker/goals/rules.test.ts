@@ -95,7 +95,23 @@ describe("validateGoal", () => {
     },
   );
 
-  it.each([0, -60, 2700.5, "45:00", undefined])(
+  it("treats a missing target time as no target", () => {
+    const withoutTarget: Partial<Goal> = { ...valid };
+    delete withoutTarget.targetTimeS;
+    expect(validateGoal(withoutTarget, TODAY)).toEqual({
+      ok: true,
+      goal: { ...valid, targetTimeS: null, availableDays: [2, 4, 6] },
+    });
+  });
+
+  it("rejects more than 7 days", () => {
+    expect(
+      errorsOf({ ...valid, availableDays: [1, 2, 3, 4, 5, 6, 7, 1] })
+        .availableDays,
+    ).toBe("Jours disponibles invalides.");
+  });
+
+  it.each([0, -60, 2700.5, "45:00"])(
     "rejects the target time %j",
     (targetTimeS) => {
       expect(errorsOf({ ...valid, targetTimeS }).targetTimeS).toMatch(

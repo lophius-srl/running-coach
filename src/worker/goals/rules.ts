@@ -90,6 +90,7 @@ function timeError(value: unknown, distanceM: number): string | null {
 function daysError(value: unknown): string | null {
   const valid =
     Array.isArray(value) &&
+    value.length <= WEEK_DAYS.length &&
     value.every((day) => Number.isInteger(day) && day >= 1 && day <= 7) &&
     new Set(value).size === value.length;
   if (!valid) return "Jours disponibles invalides.";
@@ -106,6 +107,8 @@ export function validateGoal(input: unknown, today: string): GoalValidation {
     typeof input === "object" && input !== null ? input : {}
   ) as Record<GoalField, unknown>;
   const errors: GoalErrors = {};
+  // Clé absente = pas de chrono visé, comme null.
+  const targetTimeS = raw.targetTimeS ?? null;
 
   const distance = raceDistance(raw.distanceM);
   if (!distance) errors.distanceM = "Choisis une distance cible.";
@@ -114,14 +117,16 @@ export function validateGoal(input: unknown, today: string): GoalValidation {
     errors.referenceDistanceM = "Choisis la distance du chrono de référence.";
   }
 
+  // Fuseau : le serveur passe la date UTC, le front sa date locale (au moins aussi stricte
+  // en France). Seule la validation serveur fait foi ; celle du front sert à l'affichage.
   if (!isIsoDate(raw.raceDate)) {
     errors.raceDate = "Saisis une date de course valide.";
   } else if (raw.raceDate <= today) {
     errors.raceDate = "La date de course doit être dans le futur.";
   }
 
-  if (distance && raw.targetTimeS !== null) {
-    const error = timeError(raw.targetTimeS, distance.distanceM);
+  if (distance && targetTimeS !== null) {
+    const error = timeError(targetTimeS, distance.distanceM);
     if (error) errors.targetTimeS = error;
   }
   if (reference) {
@@ -138,7 +143,7 @@ export function validateGoal(input: unknown, today: string): GoalValidation {
     goal: {
       distanceM: raw.distanceM as number,
       raceDate: raw.raceDate as string,
-      targetTimeS: raw.targetTimeS as number | null,
+      targetTimeS: targetTimeS as number | null,
       referenceDistanceM: raw.referenceDistanceM as number,
       referenceTimeS: raw.referenceTimeS as number,
       availableDays: [...(raw.availableDays as number[])].sort((a, b) => a - b),
