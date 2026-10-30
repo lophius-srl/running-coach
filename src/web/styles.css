@@ -1,0 +1,391 @@
+/*
+ * Design de base de running-coach : CSS maison, sans librairie.
+ * Toutes les couleurs, espacements, rayons et tailles passent par les variables ci-dessous.
+ * Contrastes vérifiés WCAG AA dans les deux thèmes (voir commentaires des couleurs).
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Thème clair */
+  --color-bg: #f5f5f3;
+  --color-surface: #ffffff;
+  --color-text: #1a1a1a; /* 15,9:1 sur fond, 17,4:1 sur surface */
+  --color-text-muted: #595959; /* 6,4:1 sur fond, 7,0:1 sur surface */
+  --color-border: #8a8a86; /* 3,2:1 sur fond, 3,5:1 sur surface (composants) */
+  --color-border-subtle: #e2e2de; /* décoratif uniquement */
+  --color-focus: #1a1a1a;
+  /* Orange Strava : éléments Strava et accent principal, jamais en fond de page ni texte courant. */
+  --color-strava: #fc5200;
+  --color-on-strava: #1a1a1a; /* 5,3:1 sur #FC5200 */
+  --color-strava-text: #c13d00; /* liens Strava : 5,3:1 sur surface, 4,9:1 sur fond */
+  --color-error: #a3220f; /* 6,6:1 sur fond d'erreur */
+  --color-error-bg: #fdecea;
+
+  --font-family:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 1.5rem;
+  --font-size-figure: 1.75rem;
+  --line-height: 1.5;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --border-width: 1px;
+  --accent-width: 4px;
+  --focus-width: 3px;
+
+  --target-size: 44px;
+  --content-width: 40rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #121212;
+    --color-surface: #1e1e1e;
+    --color-text: #ededea; /* 16,0:1 sur fond, 14,2:1 sur surface */
+    --color-text-muted: #a8a8a3; /* 7,9:1 sur fond, 7,0:1 sur surface */
+    --color-border: #7a7a76; /* 4,4:1 sur fond, 3,9:1 sur surface */
+    --color-border-subtle: #2e2e2c;
+    --color-focus: #ededea;
+    --color-strava-text: #fc5200; /* 5,7:1 sur fond, 5,0:1 sur surface */
+    --color-error: #ff9c8f; /* 8,5:1 sur fond d'erreur */
+    --color-error-bg: #2d1512;
+  }
+}
+
+/* Base */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-family);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height);
+  -webkit-text-size-adjust: 100%;
+}
+
+h1,
+h2,
+h3,
+p,
+dl,
+dd,
+ul {
+  margin: 0;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Texte lu par les lecteurs d'écran mais invisible à l'écran. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Mise en page : mobile d'abord, colonne de lecture centrée sur grand écran. */
+
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: 100%;
+  max-width: var(--content-width);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: var(--space-4);
+}
+
+.layout > main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+@media (min-width: 768px) {
+  .layout {
+    padding: var(--space-6) var(--space-5);
+  }
+}
+
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--border-width) solid var(--color-border-subtle);
+}
+
+.app-title {
+  font-size: var(--font-size-xl);
+  line-height: 1.2;
+}
+
+.app-footer {
+  padding-top: var(--space-4);
+  border-top: var(--border-width) solid var(--color-border-subtle);
+}
+
+.powered-by {
+  width: 180px;
+}
+
+/* Textes */
+
+.section-title {
+  margin-bottom: var(--space-3);
+  font-size: var(--font-size-lg);
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* Boutons et liens d'action : cible tactile ≥ 44 × 44 px. */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: var(--target-size);
+  min-height: var(--target-size);
+  padding: var(--space-2) var(--space-4);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button-primary {
+  border-color: var(--color-strava);
+  background: var(--color-strava);
+  color: var(--color-on-strava);
+}
+
+.button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.strava-connect {
+  display: inline-block;
+  border-radius: var(--radius-sm);
+}
+
+.strava-connect img {
+  width: 237px;
+  height: 48px;
+}
+
+/* « View on Strava » : gras, souligné et orange (consignes Strava). */
+.strava-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-size);
+  color: var(--color-strava-text);
+  font-weight: 700;
+  text-underline-offset: 0.2em;
+}
+
+/* Barre d'actions (synchronisation) */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* États : chargement, vide, erreur */
+
+.state {
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.state > * + * {
+  margin-top: var(--space-3);
+}
+
+.state-empty {
+  text-align: center;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+}
+
+.spinner {
+  flex: none;
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Erreur : fond, bordure épaisse et libellé « Erreur » — ne repose pas que sur la couleur. */
+.alert {
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-width) solid var(--color-error);
+  border-left-width: var(--accent-width);
+  border-radius: var(--radius-sm);
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+.alert-label {
+  font-weight: 700;
+}
+
+/* Chiffres clés de la semaine */
+
+.key-figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.key-figure {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-2);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-top: var(--accent-width) solid var(--color-strava);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.key-figure dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.key-figure dd {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+
+@media (min-width: 480px) {
+  .key-figure dd {
+    font-size: var(--font-size-figure);
+  }
+}
+
+/* Chiffres alignés dans les listes et totaux. */
+.key-figures,
+.run-card {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cartes de runs empilées */
+
+.run-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.run-card {
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.run-name {
+  font-size: var(--font-size-md);
+  overflow-wrap: anywhere;
+}
+
+.run-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-3) 0 var(--space-1);
+}
+
+@media (min-width: 480px) {
+  .run-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.run-stats dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.run-stats dd {
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

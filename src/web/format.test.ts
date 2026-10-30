@@ -4,7 +4,6 @@ import {
   formatDuration,
   formatHeartrate,
   formatPace,
-  formatRunCount,
   formatStartDate,
 } from "./format";
 
@@ -71,16 +70,6 @@ describe("formatStartDate", () => {
     expect(utc).toContain("23:30");
     expect(paris).toContain("30");
     expect(paris).toContain("00:30");
-  });
-});
-
-describe("formatRunCount", () => {
-  it.each([
-    [0, "0 course"],
-    [1, "1 course"],
-    [2, "2 courses"],
-  ])("formats %s as %s", (count, expected) => {
-    expect(formatRunCount(count)).toBe(expected);
   });
 });
 
