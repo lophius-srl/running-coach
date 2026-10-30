@@ -1,4 +1,5 @@
 import { applyD1Migrations, env } from "cloudflare:test";
+import { resetDatabase } from "../test-db";
 import {
   afterEach,
   beforeAll,
@@ -22,6 +23,8 @@ const NOW_MS = NOW_S * 1000;
 beforeAll(async () => {
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
 });
+
+beforeEach(() => resetDatabase(env.DB));
 
 beforeEach(async () => {
   await env.DB.prepare(

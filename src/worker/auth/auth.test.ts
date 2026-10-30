@@ -1,6 +1,15 @@
 import { applyD1Migrations, env } from "cloudflare:test";
+import { resetDatabase } from "../test-db";
 import { generateSignedCookie } from "hono/cookie";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import app from "../index";
 import type { Bindings } from "../env";
 import { STRAVA_SCOPE } from "./routes";
@@ -19,6 +28,8 @@ const testEnv: Bindings = {
 beforeAll(async () => {
   await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
 });
+
+beforeEach(() => resetDatabase(env.DB));
 
 afterEach(() => {
   vi.restoreAllMocks();
