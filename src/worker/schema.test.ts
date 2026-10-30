@@ -192,6 +192,27 @@ describe("goals", () => {
     expect(await count("goals")).toBe(1);
   });
 
+  it("allow a single goal per user", async () => {
+    const insert =
+      "INSERT INTO goals (user_id, race_date, distance_m) VALUES (1, '2027-04-11', 10000)";
+    await run(insert);
+
+    await expect(run(insert)).rejects.toThrow(/UNIQUE/);
+  });
+
+  it("reject a non-positive reference distance or time", async () => {
+    await expect(
+      run(
+        "INSERT INTO goals (user_id, race_date, distance_m, reference_distance_m) VALUES (1, '2027-04-11', 10000, 0)",
+      ),
+    ).rejects.toThrow(/CHECK/);
+    await expect(
+      run(
+        "INSERT INTO goals (user_id, race_date, distance_m, reference_time_s) VALUES (1, '2027-04-11', 10000, 0)",
+      ),
+    ).rejects.toThrow(/CHECK/);
+  });
+
   it("default available_days to an empty JSON array", async () => {
     await run(
       "INSERT INTO goals (id, user_id, race_date, distance_m) VALUES (1, 1, '2027-04-11', 10000)",

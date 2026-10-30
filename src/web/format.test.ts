@@ -6,7 +6,9 @@ import {
   formatPace,
   formatRunName,
   formatStartDate,
+  localIsoDate,
 } from "./format";
+import { parseDuration } from "../worker/goals/rules";
 
 describe("formatDistance", () => {
   it("shows kilometres with two decimals", () => {
@@ -106,4 +108,20 @@ describe("formatRunName", () => {
   it.each(["", "   "])("falls back to a default title for %j", (name) => {
     expect(formatRunName(name)).toBe("Course sans titre");
   });
+});
+
+describe("localIsoDate", () => {
+  it("formats the local calendar date with zero padding", () => {
+    expect(localIsoDate(new Date(2027, 3, 1, 23, 59))).toBe("2027-04-01");
+  });
+});
+
+// Le formulaire réaffiche un chrono enregistré avec formatDuration : il doit se relire tel quel.
+describe("formatDuration and parseDuration", () => {
+  it.each([59, 1380, 2700, 3402, 7235, 37975])(
+    "round-trip %i s so a saved goal stays editable",
+    (seconds) => {
+      expect(parseDuration(formatDuration(seconds))).toBe(seconds);
+    },
+  );
 });

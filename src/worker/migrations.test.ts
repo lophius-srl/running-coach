@@ -55,6 +55,18 @@ describe("D1 migrations", () => {
     ).rejects.toThrow(/NOT NULL/);
   });
 
+  // Compatibilité N-1 (ADR 0002) : le code précédent insère des objectifs sans ces colonnes.
+  it("add nullable reference columns to goals", async () => {
+    const added = (await columns("goals")).filter((column) =>
+      column.name.startsWith("reference_"),
+    );
+
+    expect(added).toEqual([
+      expect.objectContaining({ name: "reference_distance_m", notnull: 0 }),
+      expect.objectContaining({ name: "reference_time_s", notnull: 0 }),
+    ]);
+  });
+
   it("are idempotent when applied twice", async () => {
     await expect(
       applyD1Migrations(env.DB, env.TEST_MIGRATIONS),

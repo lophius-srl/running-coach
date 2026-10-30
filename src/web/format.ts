@@ -48,3 +48,8 @@ export function formatHeartrate(averageHeartrate: number | null): string {
 export function formatRunName(name: string): string {
   return name.trim() || "Course sans titre";
 }
+
+// Date calendaire locale (AAAA-MM-JJ) : « aujourd'hui » vu par le navigateur.
+export function localIsoDate(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
