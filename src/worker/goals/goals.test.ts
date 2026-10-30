@@ -160,4 +160,121 @@ describe("/api/goal", () => {
 
     expect(response.status).toBe(400);
   });
+
+  it.each(["null", "[]", '"goal"', ""])(
+    "rejects the non-object body %j without saving",
+    async (body) => {
+      const response = await putGoal(1, body);
+
+      expect(response.status).toBe(400);
+      expect(await goalRows()).toEqual([]);
+    },
+  );
+
+  it("saves the goal for the session user, ignoring a user id in the body", async () => {
+    await putGoal(1, JSON.stringify({ ...goal, userId: 2, user_id: 2 }));
+
+    expect(await goalRows()).toEqual([{ id: expect.any(Number), user_id: 1 }]);
+    expect(await getGoal(2)).toEqual({ goal: null });
+  });
+
+  it("returns the saved goal with its days sorted", async () => {
+    const response = await putGoal(
+      1,
+      JSON.stringify({ ...goal, availableDays: [6, 2, 4] }),
+    );
+
+    expect(await response.json()).toEqual({ goal });
+    expect((await getGoal(1)).goal?.availableDays).toEqual([2, 4, 6]);
+  });
+
+  it("keeps the previous goal when a replacement is invalid", async () => {
+    await putGoal(1, JSON.stringify(goal));
+
+    const response = await putGoal(
+      1,
+      JSON.stringify({ ...goal, availableDays: [] }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await getGoal(1)).toEqual({ goal });
+  });
+
+  it("touches updated_at but keeps created_at when replacing", async () => {
+    await putGoal(1, JSON.stringify(goal));
+    await env.DB.prepare(
+      "UPDATE goals SET created_at = '2020-01-01T00:00:00.000Z', updated_at = '2020-01-01T00:00:00.000Z'",
+    ).run();
+
+    await putGoal(1, JSON.stringify({ ...goal, distanceM: 5000 }));
+
+    const row = await env.DB.prepare(
+      "SELECT created_at, updated_at FROM goals",
+    ).first<{ created_at: string; updated_at: string }>();
+    expect(row?.created_at).toBe("2020-01-01T00:00:00.000Z");
+    expect(row?.updated_at).not.toBe("2020-01-01T00:00:00.000Z");
+  });
+
+  it("does not create two goals on concurrent saves", async () => {
+    await Promise.all([
+      putGoal(1, JSON.stringify(goal)),
+      putGoal(1, JSON.stringify({ ...goal, distanceM: 5000 })),
+    ]);
+
+    expect(await goalRows()).toHaveLength(1);
+  });
+
+  it("accepts tomorrow until 23:59:59 UTC", async () => {
+    vi.setSystemTime(new Date("2026-10-30T23:59:59.999Z"));
+
+    const response = await putGoal(
+      1,
+      JSON.stringify({ ...goal, raceDate: "2026-10-31" }),
+    );
+
+    expect(response.status).toBe(200);
+  });
+
+  it("rejects that date once it is today in UTC", async () => {
+    vi.setSystemTime(new Date("2026-10-31T00:00:00.000Z"));
+
+    const response = await putGoal(
+      1,
+      JSON.stringify({ ...goal, raceDate: "2026-10-31" }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      errors: { raceDate: "La date de course doit être dans le futur." },
+    });
+  });
+
+  it("returns a goal saved before #13 with an empty reference", async () => {
+    await env.DB.prepare(
+      "INSERT INTO goals (user_id, race_date, distance_m, available_days) VALUES (1, '2027-04-11', 10000, '[1,3]')",
+    ).run();
+
+    expect(await getGoal(1)).toEqual({
+      goal: {
+        distanceM: 10000,
+        raceDate: "2027-04-11",
+        targetTimeS: null,
+        referenceDistanceM: null,
+        referenceTimeS: null,
+        availableDays: [1, 3],
+      },
+    });
+  });
+
+  it("completes a goal saved before #13 without duplicating it", async () => {
+    await env.DB.prepare(
+      "INSERT INTO goals (user_id, race_date, distance_m) VALUES (1, '2027-04-11', 10000)",
+    ).run();
+    const [{ id }] = await goalRows();
+
+    await putGoal(1, JSON.stringify(goal));
+
+    expect(await goalRows()).toEqual([{ id, user_id: 1 }]);
+    expect(await getGoal(1)).toEqual({ goal });
+  });
 });

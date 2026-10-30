@@ -141,3 +141,172 @@ describe("validateGoal", () => {
     },
   );
 });
+
+describe("parseDuration edge cases", () => {
+  it.each([
+    ["0:00", 0],
+    ["00:00:59", 59],
+    ["\t1:00\n", 60],
+    ["100:00:00", 360000],
+  ])("parses %j as %i s", (text, seconds) => {
+    expect(parseDuration(text)).toBe(seconds);
+  });
+
+  it.each([
+    "1:60",
+    "1:5",
+    "1:05:5",
+    "1:5:00",
+    "1:00:00:00",
+    "1 :00",
+    "+1:00",
+    "1:00.5",
+    "٣:٠٠",
+  ])("rejects %j", (text) => {
+    expect(parseDuration(text)).toBeNull();
+  });
+
+  it("returns a duration that validateGoal rejects when it is absurdly large", () => {
+    const seconds = parseDuration("999999999999999999:00");
+
+    expect(errorsOf({ ...valid, targetTimeS: seconds }).targetTimeS).toMatch(
+      /h:mm:ss ou mm:ss/,
+    );
+  });
+});
+
+describe("utcIsoDate at midnight", () => {
+  it("switches to the next day exactly at 00:00 UTC", () => {
+    expect(utcIsoDate(Date.parse("2026-10-30T23:59:59.999Z"))).toBe(
+      "2026-10-30",
+    );
+    expect(utcIsoDate(Date.parse("2026-10-31T00:00:00.000Z"))).toBe(
+      "2026-10-31",
+    );
+  });
+});
+
+describe("validateGoal edge cases", () => {
+  it("accepts 29 February of a leap year", () => {
+    expect(validateGoal({ ...valid, raceDate: "2028-02-29" }, TODAY).ok).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    "2027-02-29",
+    "2026-1-5",
+    "2027-13-01",
+    "2027-04-11T00:00:00Z",
+    " 2027-04-11",
+    null,
+  ])("rejects the invalid date %j", (raceDate) => {
+    expect(errorsOf({ ...valid, raceDate }).raceDate).toBe(
+      "Saisis une date de course valide.",
+    );
+  });
+
+  it.each([
+    [5000, 755, 754, 4500, 4501],
+    [10000, 1571, 1570, 9000, 9001],
+    [21098, 3402, 3401, 18988, 18989],
+    [42195, 7235, 7234, 37975, 37976],
+  ])(
+    "bounds the target time on %i m (record %i s, max %i s)",
+    (distanceM, record, faster, slowest, slower) => {
+      const errorsFor = (targetTimeS: number) =>
+        errorsOf({ ...valid, distanceM, targetTimeS }).targetTimeS;
+
+      expect(errorsFor(record)).toBeUndefined();
+      expect(errorsFor(faster)).toMatch(/record du monde/);
+      expect(errorsFor(slowest)).toBeUndefined();
+      expect(errorsFor(slower)).toMatch(/15 min\/km/);
+    },
+  );
+
+  it.each([
+    [5000, 755, 754, 4500, 4501],
+    [10000, 1571, 1570, 9000, 9001],
+    [21098, 3402, 3401, 18988, 18989],
+    [42195, 7235, 7234, 37975, 37976],
+  ])(
+    "bounds the reference time on %i m (record %i s, max %i s)",
+    (referenceDistanceM, record, faster, slowest, slower) => {
+      const errorsFor = (referenceTimeS: number) =>
+        errorsOf({ ...valid, referenceDistanceM, referenceTimeS })
+          .referenceTimeS;
+
+      expect(errorsFor(record)).toBeUndefined();
+      expect(errorsFor(faster)).toMatch(/record du monde/);
+      expect(errorsFor(slowest)).toBeUndefined();
+      expect(errorsFor(slower)).toMatch(/15 min\/km/);
+    },
+  );
+
+  it("rejects an empty string as target time (only null means no target)", () => {
+    expect(errorsOf({ ...valid, targetTimeS: "" }).targetTimeS).toMatch(
+      /h:mm:ss ou mm:ss/,
+    );
+  });
+
+  it.each([0, -60, Number.NaN, "23:00", undefined])(
+    "rejects the reference time %j",
+    (referenceTimeS) => {
+      expect(errorsOf({ ...valid, referenceTimeS }).referenceTimeS).toMatch(
+        /h:mm:ss ou mm:ss/,
+      );
+    },
+  );
+
+  it.each([21097.5, "5000", null])(
+    "rejects the reference distance %j",
+    (referenceDistanceM) => {
+      expect(
+        errorsOf({ ...valid, referenceDistanceM }).referenceDistanceM,
+      ).toBe("Choisis la distance du chrono de référence.");
+    },
+  );
+
+  it("accepts every day of the week", () => {
+    const result = validateGoal(
+      { ...valid, availableDays: [7, 6, 5, 4, 3, 2, 1] },
+      TODAY,
+    );
+
+    expect(result.ok && result.goal.availableDays).toEqual([
+      1, 2, 3, 4, 5, 6, 7,
+    ]);
+  });
+
+  it.each([
+    [["1", "2"]],
+    [[true, 2]],
+    [[Number.NaN, 2]],
+    [null],
+    [{}],
+    [[1, 2, 2]],
+  ])("rejects invalid days %j", (availableDays) => {
+    expect(errorsOf({ ...valid, availableDays }).availableDays).toBe(
+      "Jours disponibles invalides.",
+    );
+  });
+
+  it.each([null, [], 42])("rejects the non-object payload %j", (input) => {
+    expect(validateGoal(input, TODAY).ok).toBe(false);
+  });
+
+  it("keeps only the known fields of the input", () => {
+    const result = validateGoal({ ...valid, userId: 2, extra: "x" }, TODAY);
+
+    expect(result.ok && Object.keys(result.goal).sort()).toEqual(
+      Object.keys(valid).sort(),
+    );
+  });
+
+  it("does not mutate the input days when sorting", () => {
+    const availableDays = [6, 2];
+    validateGoal({ ...valid, availableDays }, TODAY);
+
+    expect(availableDays).toEqual([6, 2]);
+  });
+});
