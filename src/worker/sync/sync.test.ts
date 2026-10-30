@@ -434,9 +434,7 @@ describe("POST /api/sync", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  // BUG #11 : stravaApiFetch ne convertit pas l'erreur réseau de fetch en StravaError,
-  // la route répond 500 au lieu de 502. Repasser en `it` une fois corrigé.
-  it.fails("answers 502 when Strava is unreachable", async () => {
+  it("answers 502 when Strava is unreachable", async () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(
       new TypeError("Network connection lost"),
     );

@@ -142,7 +142,11 @@ export async function stravaApiFetch(
   path: string,
 ): Promise<Response> {
   const accessToken = await getValidAccessToken(db, credentials, userId);
-  return fetch(`${API_BASE_URL}${path}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  try {
+    return await fetch(`${API_BASE_URL}${path}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  } catch {
+    throw new StravaError("Strava API: unreachable");
+  }
 }
