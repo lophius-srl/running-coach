@@ -11,7 +11,7 @@ export type RecentRun = {
   startDate: string; // ISO 8601, tel que renvoyé par Strava (start_date, UTC)
   distanceM: number;
   movingTimeS: number;
-  paceSPerKm: number | null; // null si la distance est nulle
+  paceSPerKm: number | null; // null si la distance ou le temps est nul
   averageHeartrate: number | null;
 };
 
@@ -28,7 +28,7 @@ export function paceSecondsPerKm(
   distanceM: number,
   movingTimeS: number,
 ): number | null {
-  if (distanceM <= 0) return null;
+  if (distanceM <= 0 || movingTimeS <= 0) return null;
   return movingTimeS / (distanceM / 1000);
 }
 

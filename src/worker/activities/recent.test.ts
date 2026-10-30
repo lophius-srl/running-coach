@@ -22,6 +22,10 @@ describe("paceSecondsPerKm", () => {
   it("is null for a zero distance", () => {
     expect(paceSecondsPerKm(0, 600)).toBeNull();
   });
+
+  it("is null for a zero moving time", () => {
+    expect(paceSecondsPerKm(5000, 0)).toBeNull();
+  });
 });
 
 describe("parseRun", () => {
