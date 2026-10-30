@@ -88,7 +88,7 @@ distincte des données API éphémères.
   l'utilisateur, avec un bouton « Supprimer mon historique importé ». La suppression du compte
   efface aussi l'historique (`ON DELETE CASCADE`).
 
-Migration additive `migrations/0002_imported_activities.sql`, compatible N-1 (ADR 0002) :
+Migration additive `migrations/0003_imported_activities.sql`, compatible N-1 (ADR 0002) :
 
 ```sql
 -- Table DURABLE : historique importé par l'utilisateur depuis son export Strava (ADR 0004).
