@@ -1,14 +1,9 @@
 // Règles pures de la synchro Strava (sans I/O). Voir docs/adr/0003 : données Strava ≤ 7 jours.
 
+import { RUN_TYPES } from "../../core/run-types";
+
 export const RETENTION_DAYS = 7;
 const RETENTION_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
-
-// Types Strava considérés comme de la course à pied.
-const RUN_TYPES: ReadonlySet<string> = new Set([
-  "Run",
-  "TrailRun",
-  "VirtualRun",
-]);
 
 export type StravaActivity = {
   id: number;

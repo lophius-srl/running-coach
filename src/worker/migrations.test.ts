@@ -31,6 +31,7 @@ describe("D1 migrations", () => {
         "goals",
         "plans",
         "plan_sessions",
+        "imported_activities",
       ]),
     );
   });

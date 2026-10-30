@@ -71,10 +71,12 @@ distincte des données API éphémères.
     localisés courants (`Course à pied`…).
 - **Endpoint** : `POST /api/history/import` (session requise), corps
   `{ rows: [{ id, startDate, sportType, name, distanceM, movingTimeS, elevationGainM, averageHeartrate }] }`.
-  - Lots de **200 lignes au plus** (≈ 30 Ko de JSON). Le Worker **revalide chaque ligne** (types,
+  - Lots de **200 lignes au plus** (≈ 40 Ko de JSON, refus au-delà de 256 Ko). Le Worker **revalide chaque ligne** (types,
     bornes, nom tronqué à 200 caractères) et refuse les lots trop gros (413).
-  - Il écrit le lot en un seul `db.batch()` d'upserts, ce qui reste bien sous 10 ms de CPU, car
-    l'attente de D1 ne compte pas.
+  - Il écrit le lot en un seul `db.batch()` de 2 requêtes : comptage des ids déjà présents, puis
+    `INSERT … SELECT FROM json_each(?) ON CONFLICT DO UPDATE` avec tout le lot en un seul paramètre
+    JSON — ce qui respecte les limites D1 (requêtes par invocation, 100 paramètres par requête) ;
+    le batch étant transactionnel, les compteurs sont exacts.
   - Le front envoie les lots **l'un après l'autre**.
 - **Déduplication et idempotence** :
   - La clé est `(user_id, id)`, où `id` est l'Activity ID Strava.
@@ -88,7 +90,7 @@ distincte des données API éphémères.
   l'utilisateur, avec un bouton « Supprimer mon historique importé ». La suppression du compte
   efface aussi l'historique (`ON DELETE CASCADE`).
 
-Migration additive `migrations/0002_imported_activities.sql`, compatible N-1 (ADR 0002) :
+Migration additive `migrations/0003_imported_activities.sql`, compatible N-1 (ADR 0002) :
 
 ```sql
 -- Table DURABLE : historique importé par l'utilisateur depuis son export Strava (ADR 0004).
