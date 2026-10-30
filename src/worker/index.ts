@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 import { authRoutes } from "./auth/routes";
 import { readSession } from "./auth/session";
-import type { AppEnv } from "./env";
+import type { AppEnv, Bindings } from "./env";
+import { StravaError } from "./strava/client";
+import { runDailySync, runSync } from "./sync/sync";
 
 export type { Bindings } from "./env";
 
@@ -38,4 +40,21 @@ app.get("/api/me", async (c) => {
   return c.json({ athleteId: user.strava_athlete_id });
 });
 
-export default app;
+// « Synchroniser maintenant » : même synchro que le cron, pour l'utilisateur de la session.
+app.post("/api/sync", async (c) => {
+  try {
+    return c.json(await runSync(c.env, c.get("userId"), Date.now()));
+  } catch (err) {
+    if (err instanceof StravaError) return c.json({ error: "strava" }, 502);
+    throw err;
+  }
+});
+
+export { app };
+
+export default {
+  fetch: app.fetch,
+  scheduled(controller, env, ctx) {
+    ctx.waitUntil(runDailySync(env, controller.scheduledTime));
+  },
+} satisfies ExportedHandler<Bindings>;

@@ -1,0 +1,112 @@
+// Synchro des activités Strava récentes (cron quotidien et bouton « Synchroniser maintenant »).
+// Ne stocke que les courses des 7 derniers jours ; purge tout ce qui a été récupéré il y a plus de 7 jours.
+
+import type { Bindings } from "../env";
+import { stravaApiFetch, StravaError } from "../strava/client";
+import { partitionActivities, purgeCutoff, syncWindowStart } from "./rules";
+
+const PER_PAGE = 100;
+// Garde-fou : 7 jours tiennent largement dans une page ; borne le temps CPU et les appels.
+const MAX_PAGES = 3;
+
+export type SyncResult = { imported: number };
+
+async function fetchRecentActivities(
+  env: Bindings,
+  userId: number,
+  nowMs: number,
+): Promise<unknown[]> {
+  const after = syncWindowStart(nowMs);
+  const activities: unknown[] = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const response = await stravaApiFetch(
+      env.DB,
+      env,
+      userId,
+      `/athlete/activities?after=${after}&per_page=${PER_PAGE}&page=${page}`,
+    );
+    if (!response.ok) {
+      throw new StravaError(`Strava activities: HTTP ${response.status}`);
+    }
+    const body: unknown = await response.json().catch(() => null);
+    if (!Array.isArray(body)) {
+      throw new StravaError("Strava activities: unexpected response");
+    }
+    activities.push(...body);
+    if (body.length < PER_PAGE) break;
+  }
+  return activities;
+}
+
+export async function purgeExpiredActivities(
+  db: D1Database,
+  nowMs: number,
+): Promise<number> {
+  const { meta } = await db
+    .prepare("DELETE FROM strava_activities WHERE fetched_at < ?")
+    .bind(purgeCutoff(nowMs))
+    .run();
+  return meta.changes;
+}
+
+export async function syncUserActivities(
+  env: Bindings,
+  userId: number,
+  nowMs: number,
+): Promise<SyncResult> {
+  const { runs, otherIds } = partitionActivities(
+    await fetchRecentActivities(env, userId, nowMs),
+  );
+  const fetchedAt = new Date(nowMs).toISOString();
+  const db = env.DB;
+  const statements = [
+    ...runs.map((activity) =>
+      db
+        .prepare(
+          `INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at
+           WHERE strava_activities.user_id = excluded.user_id`,
+        )
+        .bind(activity.id, userId, JSON.stringify(activity), fetchedAt),
+    ),
+    ...otherIds.map((id) =>
+      db
+        .prepare("DELETE FROM strava_activities WHERE id = ? AND user_id = ?")
+        .bind(id, userId),
+    ),
+  ];
+  if (statements.length > 0) await db.batch(statements);
+  return { imported: runs.length };
+}
+
+// Même synchro pour le cron et le bouton : purge d'abord (indépendante de Strava), puis import.
+export async function runSync(
+  env: Bindings,
+  userId: number,
+  nowMs: number,
+): Promise<SyncResult> {
+  await purgeExpiredActivities(env.DB, nowMs);
+  return syncUserActivities(env, userId, nowMs);
+}
+
+// Cron quotidien : purge globale, puis synchro de chaque utilisateur connecté (tokens présents).
+// L'échec d'un utilisateur n'empêche pas la synchro des autres ; il est relancé à la fin
+// pour que l'exécution apparaisse en échec dans l'observabilité Cloudflare.
+export async function runDailySync(
+  env: Bindings,
+  nowMs: number,
+): Promise<void> {
+  await purgeExpiredActivities(env.DB, nowMs);
+  const { results } = await env.DB.prepare(
+    "SELECT user_id FROM oauth_tokens",
+  ).all<{ user_id: number }>();
+  let failure: unknown = null;
+  for (const { user_id: userId } of results) {
+    try {
+      await syncUserActivities(env, userId, nowMs);
+    } catch (err) {
+      failure ??= err;
+    }
+  }
+  if (failure !== null) throw failure;
+}

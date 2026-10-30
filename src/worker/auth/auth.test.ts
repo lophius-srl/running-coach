@@ -10,7 +10,7 @@ import {
   it,
   vi,
 } from "vitest";
-import app from "../index";
+import { app } from "../index";
 import type { Bindings } from "../env";
 import { STRAVA_SCOPE } from "./routes";
 
