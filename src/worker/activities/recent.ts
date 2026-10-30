@@ -60,7 +60,8 @@ export function parseRun(payload: string): RecentRun | null {
   };
 }
 
-// Courses parties dans les 7 derniers jours, de la plus récente à la plus ancienne, et leurs totaux.
+// Courses parties dans les 7 derniers jours, de la plus récente à la plus ancienne (à départ
+// identique, id décroissant pour un ordre stable), et leurs totaux.
 export function summarizeRecentRuns(
   payloads: string[],
   nowMs: number,
@@ -70,7 +71,10 @@ export function summarizeRecentRuns(
     .map(parseRun)
     .filter((run): run is RecentRun => run !== null)
     .filter((run) => Date.parse(run.startDate) >= windowStart)
-    .sort((a, b) => Date.parse(b.startDate) - Date.parse(a.startDate));
+    .sort(
+      (a, b) =>
+        Date.parse(b.startDate) - Date.parse(a.startDate) || b.id - a.id,
+    );
   return {
     runs,
     total: {

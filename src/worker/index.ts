@@ -54,7 +54,7 @@ app.post("/api/sync", async (c) => {
 // Tableau de bord : courses des 7 derniers jours de l'utilisateur, sans le payload brut.
 app.get("/api/activities", async (c) => {
   const { results } = await c.env.DB.prepare(
-    "SELECT payload FROM strava_activities WHERE user_id = ?",
+    "SELECT payload FROM strava_activities WHERE user_id = ? ORDER BY id DESC",
   )
     .bind(c.get("userId"))
     .all<{ payload: string }>();

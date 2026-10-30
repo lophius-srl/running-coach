@@ -126,14 +126,18 @@ describe("summarizeRecentRuns", () => {
     expect(summary.runs.map((run) => run.id)).toEqual([1]);
   });
 
-  it("keeps the input order for runs started at the same time", () => {
+  it("orders runs started at the same time by decreasing id", () => {
     const sameStart = { start_date: "2026-10-28T06:00:00Z" };
     const summary = summarizeRecentRuns(
-      [payload({ id: 7, ...sameStart }), payload({ id: 3, ...sameStart })],
+      [
+        payload({ id: 3, ...sameStart }),
+        payload({ id: 7, ...sameStart }),
+        payload({ id: 5, ...sameStart }),
+      ],
       NOW_MS,
     );
 
-    expect(summary.runs.map((run) => run.id)).toEqual([7, 3]);
+    expect(summary.runs.map((run) => run.id)).toEqual([7, 5, 3]);
   });
 
   it("counts a zero-distance run in the totals", () => {
