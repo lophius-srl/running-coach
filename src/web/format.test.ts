@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatDistance,
   formatDuration,
+  formatHeartrate,
   formatPace,
   formatRunCount,
   formatStartDate,
@@ -80,5 +81,16 @@ describe("formatRunCount", () => {
     [2, "2 courses"],
   ])("formats %s as %s", (count, expected) => {
     expect(formatRunCount(count)).toBe(expected);
+  });
+});
+
+describe("formatHeartrate", () => {
+  it("rounds the average heart rate to the nearest beat", () => {
+    expect(formatHeartrate(151.6)).toBe("152 bpm");
+    expect(formatHeartrate(140)).toBe("140 bpm");
+  });
+
+  it("shows a dash when the heart rate is unknown", () => {
+    expect(formatHeartrate(null)).toBe("–");
   });
 });

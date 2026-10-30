@@ -42,3 +42,9 @@ export function formatStartDate(iso: string, timeZone?: string): string {
 export function formatRunCount(count: number): string {
   return `${count} ${count > 1 ? "courses" : "course"}`;
 }
+
+// Fréquence cardiaque moyenne arrondie (« 152 bpm ») ; « – » si la montre ne l'a pas mesurée.
+export function formatHeartrate(averageHeartrate: number | null): string {
+  if (averageHeartrate === null) return "–";
+  return `${Math.round(averageHeartrate)} bpm`;
+}
