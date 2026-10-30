@@ -79,6 +79,18 @@ describe("formatHeartrate", () => {
     expect(formatHeartrate(140)).toBe("140 bpm");
   });
 
+  it.each([
+    [150.5, "151 bpm"],
+    [150.49, "150 bpm"],
+    [149.999, "150 bpm"],
+  ])("rounds %s half up to %s", (heartrate, expected) => {
+    expect(formatHeartrate(heartrate)).toBe(expected);
+  });
+
+  it("keeps three-digit heart rates whole", () => {
+    expect(formatHeartrate(205.2)).toBe("205 bpm");
+  });
+
   it("shows a dash when the heart rate is unknown", () => {
     expect(formatHeartrate(null)).toBe("–");
   });
