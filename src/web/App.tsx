@@ -8,6 +8,32 @@ type Session =
 // Couleur de marque Strava (consignes : https://developers.strava.com/guidelines/).
 const STRAVA_ORANGE = "#FC5200";
 
+type SyncState =
+  | { status: "idle" }
+  | { status: "running" }
+  | { status: "done"; imported: number }
+  | { status: "failed" };
+
+async function requestSync(): Promise<SyncState> {
+  const response = await fetch("/api/sync", { method: "POST" });
+  if (!response.ok) return { status: "failed" };
+  const { imported } = (await response.json()) as { imported: number };
+  return { status: "done", imported };
+}
+
+function syncMessage(sync: SyncState): string {
+  switch (sync.status) {
+    case "running":
+      return "Synchronisation en cours…";
+    case "done":
+      return `${sync.imported} course(s) des 7 derniers jours synchronisée(s).`;
+    case "failed":
+      return "Échec de la synchronisation, réessaie plus tard.";
+    default:
+      return "";
+  }
+}
+
 async function fetchSession(): Promise<Session> {
   const response = await fetch("/api/me");
   if (!response.ok) return { status: "anonymous" };
@@ -17,6 +43,7 @@ async function fetchSession(): Promise<Session> {
 
 export function App() {
   const [session, setSession] = useState<Session>({ status: "loading" });
+  const [sync, setSync] = useState<SyncState>({ status: "idle" });
 
   useEffect(() => {
     fetchSession()
@@ -27,6 +54,11 @@ export function App() {
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     setSession({ status: "anonymous" });
+  }
+
+  async function synchronize() {
+    setSync({ status: "running" });
+    setSync(await requestSync().catch((): SyncState => ({ status: "failed" })));
   }
 
   return (
@@ -54,6 +86,18 @@ export function App() {
           <button type="button" onClick={logout}>
             Se déconnecter
           </button>
+        </p>
+      )}
+      {session.status === "connected" && (
+        <p>
+          <button
+            type="button"
+            onClick={synchronize}
+            disabled={sync.status === "running"}
+          >
+            Synchroniser maintenant
+          </button>{" "}
+          <span role="status">{syncMessage(sync)}</span>
         </p>
       )}
     </main>
