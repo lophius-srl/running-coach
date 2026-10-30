@@ -21,7 +21,7 @@ Le compte a été suspendu une fois après une journée très automatisée. Pour
 - **Pas de PR brouillon pour faire tourner la CI** : la PR s'ouvre une seule fois, quand le travail est prêt.
 - **Pas de surveillance en boucle** : interdit `gh pr checks --watch`, `gh run watch` et les boucles sur l'API.
   Vérifier la CI une seule fois, au moins 3 minutes après le push (`gh pr checks <n°>`), sinon laisser l'humain regarder.
-- **Créations en petit nombre** : au plus 5 issues par session, une par une, avec ≥ 30 s entre deux créations.
+- **Créations en petit nombre** : au plus 20 issues par session, une par une, avec ≥ 30 s entre deux créations.
   Pas de script de création en masse. Au-delà, préparer les fichiers et laisser l'humain les créer.
 - **Pas de commentaire automatique** : les reviews et rapports se donnent dans le terminal. Poster sur GitHub
   (`gh pr comment`, `gh pr review`, `gh issue comment`) seulement si l'humain le demande, une fois.
