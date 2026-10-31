@@ -1,8 +1,9 @@
-import { useState, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { readActivitiesCsv, type ImportedRun } from "../core/history-csv";
 import { formatDay } from "./format";
 import {
   fileProblem,
+  isRetryable,
   payloadBatches,
   postBatch,
   previewOf,
@@ -26,7 +27,12 @@ type State =
   | { status: "invalid"; message: string }
   | ({ status: "preview" } & Loaded)
   | ({ status: "sending"; progress: Progress } & Loaded)
-  | ({ status: "failed"; progress: Progress; message: string } & Loaded)
+  | ({
+      status: "failed";
+      progress: Progress;
+      message: string;
+      retryable: boolean;
+    } & Loaded)
   | { status: "done"; preview: Preview; progress: Progress };
 
 async function readFile(file: File): Promise<State> {
@@ -123,6 +129,8 @@ function Report({
 
 export function HistoryImport() {
   const [state, setState] = useState<State>({ status: "idle" });
+  // Garde synchrone : un double clic ne doit pas lancer deux envois en parallèle.
+  const sending = useRef(false);
 
   async function onFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -137,6 +145,8 @@ export function HistoryImport() {
   }
 
   async function send({ preview, batches }: Loaded, from: Progress) {
+    if (sending.current) return;
+    sending.current = true;
     const loaded: Loaded = { preview, batches };
     setState({ status: "sending", ...loaded, progress: from });
     const outcome = await sendBatches(
@@ -157,8 +167,10 @@ export function HistoryImport() {
             ...loaded,
             progress: outcome.progress,
             message: sendErrorMessage(outcome.error),
+            retryable: isRetryable(outcome.error),
           },
     );
+    sending.current = false;
   }
 
   const busy = state.status === "sending";
@@ -223,15 +235,17 @@ export function HistoryImport() {
           <p className="alert" role="alert">
             <span className="alert-label">Erreur :</span> {state.message}
           </p>
-          <div className="toolbar">
-            <button
-              type="button"
-              className="button button-primary"
-              onClick={() => send(state, state.progress)}
-            >
-              Relancer l'import
-            </button>
-          </div>
+          {state.retryable && (
+            <div className="toolbar">
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={() => send(state, state.progress)}
+              >
+                Relancer l'import
+              </button>
+            </div>
+          )}
         </>
       )}
       {state.status === "done" && (
