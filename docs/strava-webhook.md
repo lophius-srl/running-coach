@@ -44,5 +44,5 @@ curl -X DELETE "https://www.strava.com/api/v3/push_subscriptions/<id>?client_id=
   commencée il y a moins de 7 jours, sinon il retire la copie locale.
 - `activity` delete : il supprime la copie locale, sauf si l'API sert encore cette course (faux événement).
 - `athlete` avec `authorized=false` : il supprime les tokens OAuth et toutes les activités Strava de
-  l'utilisateur. Il conserve l'objectif, les plans et l'historique importé (ADR 0004). Il ne fait
-  rien si l'API accepte encore le token (faux événement). Strava ne signe pas ses webhooks.
+  l'utilisateur immédiatement, sans confirmation auprès de l'API (la suppression prime, ADR 0003 §6.3).
+  Il conserve l'objectif, les plans et l'historique importé (ADR 0004).

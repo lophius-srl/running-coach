@@ -3,6 +3,7 @@
 
 import type { Bindings } from "../env";
 import { stravaApiFetch, StravaError } from "../strava/client";
+import { deleteStravaData } from "../strava/revocation";
 import { deleteActivity, upsertActivity } from "../sync/store";
 import { decideActivity, type WebhookAction } from "./rules";
 
@@ -66,30 +67,6 @@ async function syncActivity(
   await statement.run();
 }
 
-// Un token encore accepté par Strava signale un faux événement de désautorisation : on ne
-// supprime rien. Toute autre issue (401, refresh refusé, réseau, pas de token) supprime.
-async function isStillAuthorized(
-  env: Bindings,
-  userId: number,
-): Promise<boolean> {
-  try {
-    return (await stravaApiFetch(env.DB, env, userId, "/athlete")).ok;
-  } catch {
-    return false;
-  }
-}
-
-// ADR 0003 §6.3 : tokens et activités API supprimés ; objectif, plans et historique importé
-// (données de l'utilisateur, ADR 0004) conservés.
-async function deauthorizeUser(env: Bindings, userId: number): Promise<void> {
-  if (await isStillAuthorized(env, userId)) return;
-  const db = env.DB;
-  await db.batch([
-    db.prepare("DELETE FROM oauth_tokens WHERE user_id = ?").bind(userId),
-    db.prepare("DELETE FROM strava_activities WHERE user_id = ?").bind(userId),
-  ]);
-}
-
 export async function processWebhookAction(
   env: Bindings,
   action: WebhookAction,
@@ -100,7 +77,8 @@ export async function processWebhookAction(
   if (userId === null) return;
   switch (action.kind) {
     case "deauthorize":
-      return deauthorizeUser(env, userId);
+      // Sans confirmation auprès de Strava : la suppression prime (§6.3).
+      return deleteStravaData(env.DB, userId);
     case "refresh-activity": {
       const payload = await fetchActivity(env, userId, action.activityId);
       // await plutôt que return : évite une « unhandled rejection » si syncActivity rejette d'emblée.

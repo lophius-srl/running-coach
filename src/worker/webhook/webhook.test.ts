@@ -333,9 +333,7 @@ describe("POST /api/strava/webhook (activity events)", () => {
 
 describe("POST /api/strava/webhook (deauthorization)", () => {
   it("deletes tokens and Strava activities, keeps user-provided data", async () => {
-    mockStrava({
-      "/api/v3/athlete": () => new Response("{}", { status: 401 }),
-    });
+    const fetchSpy = mockStrava({});
 
     const response = await deliver(deauthorization());
 
@@ -353,24 +351,19 @@ describe("POST /api/strava/webhook (deauthorization)", () => {
     // L'autre utilisateur n'est pas touché.
     expect(await count("oauth_tokens", 2)).toBe(1);
     expect(await count("strava_activities", 2)).toBe(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("deletes everything when Strava cannot be reached to confirm", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+  it("deletes without asking Strava, even if the API still accepts the token", async () => {
+    const fetchSpy = mockStrava({
+      "/api/v3/athlete": () => Response.json({ id: OWNER }),
+    });
 
     await deliver(deauthorization());
 
+    expect(fetchSpy).not.toHaveBeenCalled();
     expect(await count("oauth_tokens", 1)).toBe(0);
     expect(await count("strava_activities", 1)).toBe(0);
-  });
-
-  it("ignores a forged deauthorization while the token is still accepted", async () => {
-    mockStrava({ "/api/v3/athlete": () => Response.json({ id: OWNER }) });
-
-    await deliver(deauthorization());
-
-    expect(await count("oauth_tokens", 1)).toBe(1);
-    expect(await count("strava_activities", 1)).toBe(2);
   });
 });
 
@@ -785,10 +778,7 @@ describe("POST /api/strava/webhook (deauthorization edge cases)", () => {
     ).run();
   });
 
-  const revoked = () =>
-    mockStrava({
-      "/api/v3/athlete": () => new Response("{}", { status: 401 }),
-    });
+  const revoked = () => mockStrava({});
 
   it("keeps the user row, goal, plan, plan sessions and imported history", async () => {
     revoked();
@@ -816,44 +806,6 @@ describe("POST /api/strava/webhook (deauthorization edge cases)", () => {
     expect(await count("strava_activities", 1)).toBe(0);
   });
 
-  it("confirms the deauthorization with the stored token", async () => {
-    const fetchSpy = revoked();
-
-    await deliver(deauthorization());
-
-    const [input, init] = fetchSpy.mock.calls[0];
-    expect(String(input)).toBe("https://www.strava.com/api/v3/athlete");
-    expect(new Headers(init?.headers).get("Authorization")).toBe(
-      "Bearer token-1",
-    );
-  });
-
-  it("deletes everything when the expired token cannot be refreshed", async () => {
-    await env.DB.prepare(
-      "UPDATE oauth_tokens SET expires_at = 0 WHERE user_id = 1",
-    ).run();
-    mockStrava({ "/oauth/token": () => new Response("{}", { status: 400 }) });
-
-    await deliver(deauthorization());
-
-    expect(await count("oauth_tokens", 1)).toBe(0);
-    expect(await count("strava_activities", 1)).toBe(0);
-  });
-
-  it.each([429, 500, 503])(
-    "deletes everything when Strava answers %s to the confirmation",
-    async (status) => {
-      mockStrava({
-        "/api/v3/athlete": () => new Response("{}", { status }),
-      });
-
-      await deliver(deauthorization());
-
-      expect(await count("oauth_tokens", 1)).toBe(0);
-      expect(await count("strava_activities", 1)).toBe(0);
-    },
-  );
-
   it("deletes the activities even when the tokens are already gone", async () => {
     await env.DB.prepare("DELETE FROM oauth_tokens WHERE user_id = 1").run();
     const fetchSpy = mockStrava({});
@@ -862,18 +814,6 @@ describe("POST /api/strava/webhook (deauthorization edge cases)", () => {
 
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(await count("strava_activities", 1)).toBe(0);
-  });
-
-  // Comportement actuel (point de revue) : si Strava accepte encore le token au moment de la
-  // confirmation, une désautorisation légitime envoyée avant la révocation est ignorée.
-  it("keeps tokens and activities when the token is still accepted, even for a genuine event", async () => {
-    mockStrava({ "/api/v3/athlete": () => Response.json({ id: OWNER }) });
-
-    const response = await deliver(deauthorization());
-
-    expect(response.status).toBe(200);
-    expect(await count("oauth_tokens", 1)).toBe(1);
-    expect(await count("strava_activities", 1)).toBe(2);
   });
 
   it("leaves the other user untouched", async () => {
