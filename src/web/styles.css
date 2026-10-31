@@ -503,6 +503,26 @@ a {
   font-weight: 400;
 }
 
+/* Import de l'historique */
+
+.history-import {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+}
+
+.history-help ol {
+  margin: var(--space-2) 0;
+  padding-left: var(--space-5);
+}
+
+.history-import progress {
+  flex: 1;
+  min-width: 8rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
