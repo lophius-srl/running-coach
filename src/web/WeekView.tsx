@@ -58,13 +58,16 @@ function PacesSummary({ goal }: { goal: GoalState }) {
           ))}
         </dl>
       ) : (
-        <MissingPaces basis={basis} />
+        <MissingPaces basis={basis} linkGoal />
       )}
-      <p>
-        <RouteLink view="goal" className="text-link action-link">
-          {paces ? "Détail de mes allures" : "Mon objectif"}
-        </RouteLink>
-      </p>
+      {/* Sans objectif, le lien vers la vue Objectif est déjà dans le message. */}
+      {(paces || !basis) && (
+        <p>
+          <RouteLink view="goal" className="text-link action-link">
+            {paces ? "Détail de mes allures" : "Mon objectif"}
+          </RouteLink>
+        </p>
+      )}
     </div>
   );
 }

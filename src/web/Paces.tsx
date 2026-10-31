@@ -26,7 +26,18 @@ export const ZONES: { key: ZoneKey; label: string; hint: string }[] = [
 type Props = { paces: TrainingPaces | null; basis: PaceBasis | null };
 
 // Raison de l'absence d'allures : pas de course exploitable, ou pas encore d'objectif.
-export function MissingPaces({ basis }: Pick<Props, "basis">) {
+// linkGoal : lien vers la vue Objectif (inutile sur cette vue, où le formulaire est à côté).
+export function MissingPaces({
+  basis,
+  linkGoal = false,
+}: Pick<Props, "basis"> & { linkGoal?: boolean }) {
+  if (basis && !linkGoal) {
+    return (
+      <p className="muted">
+        Enregistre ton objectif avec le formulaire pour voir tes allures.
+      </p>
+    );
+  }
   if (basis) {
     return (
       <p className="muted">
