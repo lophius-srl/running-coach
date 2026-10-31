@@ -43,6 +43,7 @@ describe("stravaRunSample", () => {
     JSON.stringify({ ...payload, distance: null }),
     JSON.stringify({ ...payload, moving_time: "3000" }),
     JSON.stringify({ ...payload, start_date: 0 }),
+    JSON.stringify({ ...payload, start_date: "pas une date" }),
     JSON.stringify({ ...payload, sport_type: 1, type: undefined }),
     JSON.stringify({ ...payload, moving_time: null }),
     JSON.stringify({ ...payload, distance: undefined }),

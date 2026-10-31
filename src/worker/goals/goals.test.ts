@@ -516,6 +516,19 @@ describe("/api/goal : sources du niveau (QA #46)", () => {
     expect((await getGoal(1)).basis).toEqual(basisOf(fiveK));
   });
 
+  it("falls back on the imported copy when the synced start date is unreadable", async () => {
+    await importRun(1, fiveK);
+    await syncPayload(1, fiveK.id, {
+      id: fiveK.id,
+      sport_type: "Run",
+      start_date: "pas une date",
+      distance: fiveK.distanceM,
+      moving_time: fiveK.movingTimeS,
+    });
+
+    expect((await getGoal(1)).basis).toEqual(basisOf(fiveK));
+  });
+
   it("ignores a synced run with a zero moving time", async () => {
     await syncRun(1, { ...fiveK, movingTimeS: 0 });
 

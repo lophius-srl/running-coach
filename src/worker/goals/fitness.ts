@@ -36,6 +36,7 @@ export function stravaRunSample(payload: string): RunSample | null {
   if (
     !Number.isSafeInteger(id) ||
     typeof start_date !== "string" ||
+    Number.isNaN(Date.parse(start_date)) ||
     typeof sportType !== "string" ||
     typeof distance !== "number" ||
     typeof moving_time !== "number"
