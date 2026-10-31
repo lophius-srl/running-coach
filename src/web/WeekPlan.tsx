@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { HARD_KINDS } from "../core/plan";
 import type { PlanResponse, PlanView } from "../worker/plans/view";
 import { RouteLink } from "./AppNav";
-import { formatPaceRange } from "./format";
+import { formatPaceRange, localIsoDate } from "./format";
 import {
   formatPlanDay,
+  formatPlanPeriod,
+  isPlanOver,
   PHASE_LABELS,
   planErrorMessage,
   SESSION_LABELS,
@@ -132,13 +134,23 @@ type Props = {
   syncCount: number; // change à chaque sync réussie : les allures cibles sont relues
 };
 
+// Clé de l'objectif enregistré : le plan est relu quand il change (allures, jours) ;
+// undefined tant que l'objectif charge, pour ne pas lire le plan deux fois au démarrage.
+function goalKey(goal: GoalState): string | undefined {
+  if (goal.status === "loading") return undefined;
+  return goal.status === "loaded" ? JSON.stringify(goal.data) : "failed";
+}
+
 // Plan de la semaine : dernier plan enregistré, et bouton pour en générer un nouveau.
 export function WeekPlan({ goal, syncCount }: Props) {
   const [state, setState] = useState<PlanState>({ status: "loading" });
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const planKey = goalKey(goal);
+
   useEffect(() => {
+    if (planKey === undefined) return;
     let active = true;
     loadPlan().then((loaded) => {
       if (active) setState(loaded);
@@ -146,7 +158,7 @@ export function WeekPlan({ goal, syncCount }: Props) {
     return () => {
       active = false;
     };
-  }, [syncCount]);
+  }, [syncCount, planKey]);
 
   async function generate() {
     setGenerating(true);
@@ -162,6 +174,23 @@ export function WeekPlan({ goal, syncCount }: Props) {
     !!goal.data.goal?.availableDays.length &&
     !!goal.data.paces;
   const plan = state.status === "loaded" ? state.plan : null;
+  const over = !!plan && isPlanOver(plan.weekStart, localIsoDate(new Date()));
+  const generator = ready && (
+    <div className="toolbar">
+      <button
+        type="button"
+        className={`button${plan && !over ? "" : " button-primary"}`}
+        onClick={generate}
+        disabled={generating}
+        aria-busy={generating}
+      >
+        {generating && <span className="spinner" aria-hidden="true" />}
+        {plan && !over
+          ? "Régénérer mon plan"
+          : "Générer mon plan de la semaine"}
+      </button>
+    </div>
+  );
 
   return (
     <section className="week-plan" aria-labelledby={HEADING_ID}>
@@ -172,7 +201,17 @@ export function WeekPlan({ goal, syncCount }: Props) {
       {state.status === "failed" && (
         <Alert message="Impossible de charger ton plan." />
       )}
-      {plan && <p className="muted">{PHASE_LABELS[plan.phase]}</p>}
+      {plan && (
+        <p className="muted">
+          {formatPlanPeriod(plan.weekStart)} · {PHASE_LABELS[plan.phase]}
+        </p>
+      )}
+      {over && (
+        <p className="card state plan-over" role="status">
+          Ce plan est terminé : génère ta nouvelle semaine.
+        </p>
+      )}
+      {over && generator}
       {plan && <PlanSessions plan={plan} />}
       {state.status === "loaded" && !plan && ready && (
         <p className="muted">
@@ -180,20 +219,7 @@ export function WeekPlan({ goal, syncCount }: Props) {
         </p>
       )}
       <MissingInputs goal={goal} />
-      {ready && (
-        <div className="toolbar">
-          <button
-            type="button"
-            className="button button-primary"
-            onClick={generate}
-            disabled={generating}
-            aria-busy={generating}
-          >
-            {generating && <span className="spinner" aria-hidden="true" />}
-            {plan ? "Régénérer mon plan" : "Générer mon plan de la semaine"}
-          </button>
-        </div>
-      )}
+      {!over && generator}
       {error && <Alert message={error} />}
     </section>
   );

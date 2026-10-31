@@ -96,7 +96,7 @@ function distanceIndex(distanceM: number): number {
   return distanceM <= 21098 ? 2 : 3;
 }
 
-function addDays(isoDate: string, days: number): string {
+export function addDays(isoDate: string, days: number): string {
   const ms = Date.parse(`${isoDate}T00:00:00Z`) + days * DAY_MS;
   return new Date(ms).toISOString().slice(0, 10);
 }

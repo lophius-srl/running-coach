@@ -1,6 +1,6 @@
 // Libellés et formatage du plan de la semaine (fonctions pures, testées sans React).
 
-import type { PlanPhase, SessionKind } from "../core/plan";
+import { addDays, type PlanPhase, type SessionKind } from "../core/plan";
 import type { PlanError } from "../worker/plans/view";
 
 export const SESSION_LABELS: Record<SessionKind, string> = {
@@ -39,4 +39,14 @@ export function formatPlanDay(isoDate: string): string {
     month: "short",
     timeZone: "UTC",
   });
+}
+
+// Période couverte par le plan (7 jours) : « Du mardi 3 nov. au lundi 9 nov. ».
+export function formatPlanPeriod(weekStart: string): string {
+  return `Du ${formatPlanDay(weekStart)} au ${formatPlanDay(addDays(weekStart, 6))}`;
+}
+
+// Plan terminé : son dernier jour (weekStart + 6) est passé. `today` en AAAA-MM-JJ.
+export function isPlanOver(weekStart: string, today: string): boolean {
+  return addDays(weekStart, 6) < today;
 }
