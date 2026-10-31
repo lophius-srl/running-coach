@@ -8,6 +8,7 @@ import { planRoutes } from "./plans/routes";
 import type { AppEnv, Bindings } from "./env";
 import { StravaError } from "./strava/client";
 import { runDailySync, runSync } from "./sync/sync";
+import { webhookRoutes } from "./webhook/routes";
 
 export type { Bindings } from "./env";
 
@@ -36,6 +37,7 @@ app.route("/api/auth", authRoutes);
 app.route("/api/goal", goalRoutes);
 app.route("/api/history", historyRoutes);
 app.route("/api/plan", planRoutes);
+app.route("/api/strava/webhook", webhookRoutes);
 
 app.get("/api/me", async (c) => {
   const user = await c.env.DB.prepare(
