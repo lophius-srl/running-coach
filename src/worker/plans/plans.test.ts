@@ -209,4 +209,75 @@ describe("/api/plan", () => {
     });
     expect(await (await callPlan(1)).json()).toEqual({ plan });
   });
+
+  it("returns each user's own plan when both have one", async () => {
+    await saveGoal(1);
+    await importRun(1, 1, 1380);
+    await env.DB.prepare(
+      "INSERT INTO goals (user_id, race_date, distance_m, available_days) VALUES (2, '2027-04-11', 5000, '[1,7]')",
+    ).run();
+    await importRun(2, 2, 1380);
+    const own = await (await callPlan(1, "POST")).json<PlanResponse>();
+    await callPlan(2, "POST");
+
+    expect(await (await callPlan(1)).json()).toEqual(own);
+    const other = await (await callPlan(2)).json<PlanResponse>();
+    expect(other.plan?.sessions.map((s) => s.date)).toEqual([
+      "2026-11-02",
+      "2026-11-08",
+    ]);
+  });
+
+  it("keeps showing the saved plan after a goal change, until regenerated", async () => {
+    await saveGoal(1);
+    await importRun(1, 1, 1380);
+    const before = await (await callPlan(1, "POST")).json<PlanResponse>();
+
+    await env.DB.prepare(
+      "UPDATE goals SET available_days = '[1,7]' WHERE user_id = 1",
+    ).run();
+    expect(await (await callPlan(1)).json()).toEqual(before);
+
+    const { plan } = await (await callPlan(1, "POST")).json<PlanResponse>();
+    expect(plan?.sessions.map(({ date, kind }) => [date, kind])).toEqual([
+      ["2026-11-02", "recovery"],
+      ["2026-11-08", "long"],
+    ]);
+    expect(await (await callPlan(1)).json()).toEqual({ plan });
+  });
+
+  // Compatibilité N-1 : un plan écrit par le code précédent n'a ni week_start ni duration_min.
+  it("ignores plans created before the week plan existed", async () => {
+    await saveGoal(1);
+    await env.DB.prepare(
+      "INSERT INTO plans (goal_id) SELECT id FROM goals",
+    ).run();
+    await env.DB.prepare(
+      "INSERT INTO plan_sessions (plan_id, scheduled_date, kind) SELECT max(id), '2026-11-03', 'endurance' FROM plans",
+    ).run();
+    expect(await (await callPlan(1)).json()).toEqual({ plan: null });
+  });
+
+  it("refuses to generate when the only runs are older than the fitness window", async () => {
+    await saveGoal(1);
+    await importRun(1, 1, 1380);
+    vi.setSystemTime(new Date("2027-01-10T10:00:00.000Z"));
+    const response = await callPlan(1, "POST");
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "no_paces" });
+  });
+
+  it("generates the plan for a race the day after tomorrow", async () => {
+    await saveGoal(1, "2026-11-04");
+    await importRun(1, 1, 1380);
+    const { plan } = await (await callPlan(1, "POST")).json<PlanResponse>();
+    expect(plan?.phase).toBe("taper");
+    expect(plan?.sessions).toEqual([
+      expect.objectContaining({
+        date: "2026-11-03",
+        kind: "endurance",
+        durationMin: 25,
+      }),
+    ]);
+  });
 });

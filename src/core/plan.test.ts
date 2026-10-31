@@ -244,3 +244,138 @@ describe("generateWeekPlan", () => {
     expect(generateWeekPlan({ ...input, raceDate: "2026-10-01" })).toBeNull();
   });
 });
+
+describe("generateWeekPlan — cas limites", () => {
+  const kinds = (plan: ReturnType<typeof generateWeekPlan>) =>
+    plan?.sessions.map(({ date, kind }) => [date, kind]);
+
+  it("plans exactly one long run in a week without race, whatever the start day", () => {
+    for (let offset = 0; offset < 7; offset++) {
+      const today = `2026-11-0${2 + offset}`;
+      for (const days of DAY_SETS) {
+        const plan = generateWeekPlan({ ...input, today, availableDays: days });
+        const longRuns = plan!.sessions.filter((s) => s.kind === "long");
+        expect(longRuns, `${today} ${days}`).toHaveLength(1);
+        expect(plan!.sessions).toHaveLength(days.length);
+      }
+    }
+  });
+
+  it("gives every session a positive duration and a description", () => {
+    for (const raceDate of ["2026-11-10", "2026-12-20", "2027-04-11"]) {
+      for (const distanceM of [5000, 10000, 21098, 42195]) {
+        const plan = generateWeekPlan({
+          ...input,
+          raceDate,
+          distanceM,
+          availableDays: [1, 2, 3, 4, 5, 6, 7],
+        });
+        for (const session of plan!.sessions) {
+          expect(session.durationMin).toBeGreaterThan(0);
+          expect(session.description.length).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
+  it("puts the long run on the last weekday when only weekdays are available", () => {
+    const plan = generateWeekPlan({ ...input, availableDays: [1, 2, 3, 4, 5] });
+    expect(kinds(plan)).toEqual([
+      ["2026-11-02", "vma"],
+      ["2026-11-03", "endurance"],
+      ["2026-11-04", "threshold"],
+      ["2026-11-05", "endurance"],
+      ["2026-11-06", "long"],
+    ]);
+  });
+
+  it("does not depend on the order or duplicates of available days", () => {
+    expect(generateWeekPlan({ ...input, availableDays: [6, 2, 4, 2] })).toEqual(
+      generateWeekPlan(input),
+    );
+  });
+
+  it("does not modify its input", () => {
+    const days = [6, 2, 4];
+    generateWeekPlan({ ...input, availableDays: days });
+    expect(days).toEqual([6, 2, 4]);
+  });
+
+  it("skips a race day that is an available day", () => {
+    const plan = generateWeekPlan({
+      ...input,
+      availableDays: [2, 4, 6],
+      raceDate: "2026-11-05",
+    });
+    expect(kinds(plan)).toEqual([["2026-11-03", "endurance"]]);
+  });
+
+  it("plans only a short easy run today when the race is tomorrow", () => {
+    const plan = generateWeekPlan({
+      ...input,
+      availableDays: [1, 7],
+      raceDate: "2026-11-03",
+    });
+    expect(plan?.phase).toBe("taper");
+    expect(plan?.sessions).toEqual([
+      expect.objectContaining({
+        date: "2026-11-02",
+        kind: "endurance",
+        durationMin: 25,
+      }),
+    ]);
+  });
+
+  it("drops the long run planned on race day but keeps the quality session", () => {
+    const plan = generateWeekPlan({
+      ...input,
+      availableDays: [1, 3, 5],
+      raceDate: "2026-11-06",
+    });
+    expect(
+      plan?.sessions.map(({ date, kind, durationMin }) => [
+        date,
+        kind,
+        durationMin,
+      ]),
+    ).toEqual([
+      ["2026-11-02", "race_pace", 45],
+      ["2026-11-04", "endurance", 25],
+    ]);
+  });
+
+  it.each([
+    ["2026-11-16", "taper"],
+    ["2026-11-17", "specific"],
+    ["2026-12-28", "specific"],
+    ["2026-12-29", "development"],
+  ])("uses the exact phase bound for a race on %s", (raceDate, phase) => {
+    expect(generateWeekPlan({ ...input, raceDate })?.phase).toBe(phase);
+  });
+
+  it("crosses the year boundary with real weekdays", () => {
+    const plan = generateWeekPlan({
+      ...input,
+      today: "2026-12-29", // un mardi
+      raceDate: "2027-04-11",
+      availableDays: [5, 7],
+    });
+    expect(kinds(plan)).toEqual([
+      ["2027-01-01", "vma"],
+      ["2027-01-03", "long"],
+    ]);
+  });
+
+  it("handles a leap day", () => {
+    const plan = generateWeekPlan({
+      ...input,
+      today: "2028-02-28", // un lundi
+      raceDate: "2028-06-01",
+      availableDays: [2, 4],
+    });
+    expect(plan?.sessions.map((s) => s.date)).toEqual([
+      "2028-02-29",
+      "2028-03-02",
+    ]);
+  });
+});
