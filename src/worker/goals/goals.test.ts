@@ -13,6 +13,7 @@ import { app } from "../index";
 import type { Bindings } from "../env";
 import { resetDatabase } from "../test-db";
 import { trainingPaces, vdot } from "../../core/paces";
+import { loadFitness } from "./fitness";
 import type { Goal, GoalResponse } from "./rules";
 
 const testEnv: Bindings = { ...env, SESSION_SECRET: "session-secret" };
@@ -458,5 +459,94 @@ describe("/api/goal", () => {
     expect((await getGoal(2)).paces).toEqual(
       trainingPaces({ ...marathon, vdot: vdot(5000, 1200) }),
     );
+  });
+});
+
+describe("/api/goal : sources du niveau (QA #46)", () => {
+  async function syncPayload(userId: number, id: number, payload: unknown) {
+    await env.DB.prepare(
+      "INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (?, ?, ?, '2026-10-30T08:00:00.000Z')",
+    )
+      .bind(id, userId, JSON.stringify(payload))
+      .run();
+  }
+
+  // Toutes les tables applicatives, pour vérifier qu'aucune lecture n'écrit le niveau.
+  async function snapshot() {
+    const { results } = await env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name",
+    ).all<{ name: string }>();
+    const tables: Record<string, unknown[]> = {};
+    for (const { name } of results) {
+      tables[name] = (
+        await env.DB.prepare(`SELECT * FROM "${name}"`).all()
+      ).results;
+    }
+    return tables;
+  }
+
+  it("ignores a synced run started more than 8 weeks ago", async () => {
+    await syncRun(1, { ...fiveK, startDate: "2026-09-04T09:59:59.000Z" });
+
+    expect((await getGoal(1)).basis).toBeNull();
+  });
+
+  it("ignores an imported run dated in the future", async () => {
+    await importRun(1, { ...fiveK, startDate: "2026-10-30T10:00:01.000Z" });
+
+    expect((await getGoal(1)).basis).toBeNull();
+  });
+
+  it("counts a synced run whose payload only has the legacy type", async () => {
+    await syncPayload(1, 77, {
+      id: 77,
+      type: "Run",
+      start_date: fiveK.startDate,
+      distance: fiveK.distanceM,
+      moving_time: fiveK.movingTimeS,
+    });
+
+    expect((await getGoal(1)).basis).toEqual(basisOf(fiveK));
+  });
+
+  it("falls back on the imported copy when the synced payload is incomplete", async () => {
+    await importRun(1, fiveK);
+    await syncPayload(1, fiveK.id, { id: fiveK.id, sport_type: "Run" });
+
+    expect((await getGoal(1)).basis).toEqual(basisOf(fiveK));
+  });
+
+  it("ignores a synced run with a zero moving time", async () => {
+    await syncRun(1, { ...fiveK, movingTimeS: 0 });
+
+    expect((await getGoal(1)).basis).toBeNull();
+  });
+
+  it("loads only the given user's runs from both sources", async () => {
+    await importRun(1, fiveK);
+    await importRun(2, { ...fiveK, id: 601, movingTimeS: 1100 });
+    await syncRun(2, { ...fiveK, id: 602, movingTimeS: 1150 });
+
+    const fitness = await loadFitness(env.DB, 1, Date.now());
+
+    expect(fitness?.run.id).toBe(fiveK.id);
+    expect(await loadFitness(env.DB, 3, Date.now())).toBeNull();
+  });
+
+  // ADR 0003 : le niveau est calculé à la volée ; GET n'écrit rien, PUT n'écrit que l'objectif.
+  it("stores neither the level nor the paces", async () => {
+    await importRun(1, fiveK);
+    await syncRun(1, { ...fiveK, id: 700, movingTimeS: 1500 });
+    await putGoal(1, JSON.stringify(goal));
+    const before = await snapshot();
+
+    await getGoal(1);
+    await putGoal(1, JSON.stringify(goal));
+    const after = await snapshot();
+
+    expect({ ...after, goals: [] }).toEqual({ ...before, goals: [] });
+    expect(after.goals).toHaveLength(1);
+    const stored = JSON.stringify(after.goals);
+    expect(stored).not.toMatch(/vdot|pace/i);
   });
 });

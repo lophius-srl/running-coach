@@ -12,7 +12,7 @@ import {
   SLOWEST_PACE_S_PER_KM,
   type RunSample,
 } from "./fitness";
-import { vdot } from "./paces";
+import { trainingPaces, vdot } from "./paces";
 
 const NOW = Date.parse("2026-10-31T12:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -189,5 +189,65 @@ describe("mergeRuns", () => {
     const api = [run({ id: 100, movingTimeS: 2900 }), run({ id: 102 })];
 
     expect(mergeRuns(imported, api)).toEqual([api[0], imported[1], api[1]]);
+  });
+});
+
+describe("estimateFitness : cas limites (QA #46)", () => {
+  it("retient une course unique exploitable", () => {
+    const only = run({ distanceM: 5000, movingTimeS: 1380 });
+    expect(estimateFitness([only], NOW)).toEqual({
+      vdot: vdot(5000, 1380),
+      run: only,
+    });
+  });
+
+  it("garde la version API même plus lente que la copie importée", () => {
+    const imported = run({ id: 300, movingTimeS: 2800 });
+    const api = run({ id: 300, movingTimeS: 3000 });
+
+    expect(estimateFitness(mergeRuns([imported], [api]), NOW)?.run).toBe(api);
+  });
+
+  it("ignore une course importée retypée en vélo côté Strava (version API)", () => {
+    const imported = run({ id: 301 });
+    const api = run({ id: 301, sportType: "Ride" });
+
+    expect(estimateFitness(mergeRuns([imported], [api]), NOW)).toBeNull();
+  });
+
+  it("fusionne des sources vides", () => {
+    expect(mergeRuns([], [])).toEqual([]);
+    const only = run();
+    expect(mergeRuns([only], [])).toEqual([only]);
+    expect(mergeRuns([], [only])).toEqual([only]);
+  });
+
+  it("donne des allures finies aux extrêmes des courses acceptées", () => {
+    // Niveau le plus bas accepté (3 km à 15 min/km) et le plus haut (VDOT juste sous 85).
+    const extremes = [
+      run({ distanceM: 3000, movingTimeS: 2700 }),
+      run({ distanceM: 43000, movingTimeS: 21600 }),
+      run({ distanceM: 10000, movingTimeS: 1590 }),
+    ];
+    for (const sample of extremes) {
+      const score = runVdot(sample, NOW);
+      expect(score).not.toBeNull();
+      for (const distanceM of [5000, 10000, 21098, 42195]) {
+        const paces = trainingPaces({
+          distanceM,
+          targetTimeS: null,
+          vdot: score as number,
+        });
+        const values = [
+          paces.endurance,
+          paces.threshold,
+          paces.vma,
+          paces.race,
+        ].flatMap((zone) => [zone.fastSPerKm, zone.slowSPerKm]);
+        for (const value of [...values, paces.predictedTimeS]) {
+          expect(Number.isSafeInteger(value) && value > 0).toBe(true);
+        }
+      }
+    }
   });
 });

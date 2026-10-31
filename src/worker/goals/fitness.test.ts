@@ -26,6 +26,16 @@ describe("stravaRunSample", () => {
     expect(stravaRunSample(old)?.sportType).toBe("Run");
   });
 
+  it("falls back on type when sport_type is null", () => {
+    const text = JSON.stringify({ ...payload, sport_type: null });
+    expect(stravaRunSample(text)?.sportType).toBe("Run");
+  });
+
+  it("keeps a zero moving time, left to the level filters", () => {
+    const text = JSON.stringify({ ...payload, moving_time: 0 });
+    expect(stravaRunSample(text)?.movingTimeS).toBe(0);
+  });
+
   it.each([
     "{oops",
     "null",
@@ -34,6 +44,11 @@ describe("stravaRunSample", () => {
     JSON.stringify({ ...payload, moving_time: "3000" }),
     JSON.stringify({ ...payload, start_date: 0 }),
     JSON.stringify({ ...payload, sport_type: 1, type: undefined }),
+    JSON.stringify({ ...payload, moving_time: null }),
+    JSON.stringify({ ...payload, distance: undefined }),
+    JSON.stringify({ ...payload, id: 12.5 }),
+    "[]",
+    '"run"',
   ])("returns null for the unreadable payload %s", (text) => {
     expect(stravaRunSample(text)).toBeNull();
   });
