@@ -401,7 +401,10 @@ describe("POST /api/strava/webhook (ignored events)", () => {
 });
 
 // Corps envoyé au POST sans passer par JSON.stringify ni Content-Type automatique.
-async function postRaw(body: string, headers: Record<string, string> = {}) {
+async function postRaw(
+  body: string | ReadableStream<Uint8Array>,
+  headers: Record<string, string> = {},
+) {
   const ctx = createExecutionContext();
   const waitUntil = vi.spyOn(ctx, "waitUntil");
   const response = await app.fetch(
@@ -667,6 +670,81 @@ describe("POST /api/strava/webhook (ignored bodies and deferred work)", () => {
 
     expect(waitUntil).toHaveBeenCalledTimes(1);
     expect((await activities()).map((a) => a.id)).toEqual([11, 20]);
+  });
+
+  // Événement valide (delete de l'activité 10) complété par `pad` jusqu'à la taille voulue.
+  const paddedEvent = (pad: string) =>
+    JSON.stringify({ pad, ...activityEvent("delete", 10) });
+
+  function streamOf(text: string, chunkSize = 512) {
+    const bytes = new TextEncoder().encode(text);
+    let offset = 0;
+    return new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (offset >= bytes.length) return controller.close();
+        controller.enqueue(bytes.slice(offset, offset + chunkSize));
+        offset += chunkSize;
+      },
+    });
+  }
+
+  it("ignores a chunked body over 4 KiB sent without Content-Length", async () => {
+    const fetchSpy = mockStrava({});
+    const body = paddedEvent("x".repeat(5000));
+
+    const { response, waitUntil } = await postRaw(streamOf(body));
+
+    expect(response.status).toBe(200);
+    expect(waitUntil).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect((await activities()).map((a) => a.id)).toEqual([10, 11, 20]);
+  });
+
+  it("stops reading an endless chunked body", async () => {
+    let pulls = 0;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls++;
+        controller.enqueue(new Uint8Array(1024).fill(0x20));
+      },
+    });
+
+    const { response, waitUntil } = await postRaw(endless);
+
+    expect(response.status).toBe(200);
+    expect(waitUntil).not.toHaveBeenCalled();
+    expect(pulls).toBeLessThan(10);
+  });
+
+  it("processes a valid chunked body under 4 KiB", async () => {
+    mockStrava({});
+
+    const { waitUntil } = await postRaw(
+      streamOf(paddedEvent("x".repeat(1000))),
+    );
+
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+    expect((await activities()).map((a) => a.id)).toEqual([11, 20]);
+  });
+
+  it("counts bytes, not characters, for multi-byte bodies", async () => {
+    const fetchSpy = mockStrava({});
+    const body = paddedEvent("é".repeat(2100));
+    expect(body.length).toBeLessThan(4096);
+    expect(new TextEncoder().encode(body).length).toBeGreaterThan(4096);
+
+    const { waitUntil } = await postRaw(streamOf(body));
+
+    expect(waitUntil).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("accepts a multi-byte body under 4 KiB", async () => {
+    mockStrava({});
+
+    const { waitUntil } = await postRaw(paddedEvent("é".repeat(1000)));
+
+    expect(waitUntil).toHaveBeenCalledTimes(1);
   });
 
   it("ignores an empty body", async () => {

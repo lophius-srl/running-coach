@@ -28,13 +28,38 @@ async function matchesVerifyToken(
   return crypto.subtle.timingSafeEqual(a, b);
 }
 
+// Lecture en flux avec un compteur d'octets : on abandonne dès que MAX_BODY_BYTES est dépassé,
+// même sans Content-Length (envoi chunked). null si trop gros.
+async function readBodyBytes(request: Request): Promise<Uint8Array | null> {
+  if (!request.body) return new Uint8Array();
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_BODY_BYTES) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 async function readJsonBody(request: Request): Promise<unknown> {
   const declared = Number(request.headers.get("Content-Length") ?? 0);
   if (declared > MAX_BODY_BYTES) return null;
-  const text = await request.text().catch(() => "");
-  if (text.length > MAX_BODY_BYTES) return null;
   try {
-    return JSON.parse(text);
+    const bytes = await readBodyBytes(request);
+    return bytes === null ? null : JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     return null;
   }
