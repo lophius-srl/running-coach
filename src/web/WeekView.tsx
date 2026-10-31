@@ -7,6 +7,7 @@ import { RecentRuns } from "./RecentRuns";
 import { Alert, Loading } from "./ui";
 import type { GoalState } from "./useGoal";
 import type { SyncState } from "./useSync";
+import { WeekPlan } from "./WeekPlan";
 
 // Message de suivi (zone role="status") ; l'échec est affiché à part, en alerte.
 function syncMessage(sync: SyncState): string {
@@ -119,7 +120,8 @@ export function WeekView({ athleteId, goal, sync, syncCount, onSync }: Props) {
         <Alert message="Échec de la synchronisation, réessaie plus tard." />
       )}
       <div className="view-grid view-grid-aside">
-        <div>
+        <div className="view-stack">
+          <WeekPlan goal={goal} syncCount={syncCount} />
           {activities.status === "loading" && (
             <Loading label="Chargement de tes courses…" />
           )}
