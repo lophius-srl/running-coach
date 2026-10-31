@@ -9,11 +9,13 @@ import {
 import {
   fileProblem,
   ImportRequestError,
+  isRetryable,
   MAX_FILE_BYTES,
   payloadBatches,
   postBatch,
   previewOf,
   readErrorMessage,
+  REQUEST_TIMEOUT_MS,
   sendBatches,
   sendErrorMessage,
   startProgress,
@@ -242,11 +244,58 @@ describe("sendBatches", () => {
   });
 });
 
+describe("isRetryable", () => {
+  it("retries a network failure", () => {
+    expect(isRetryable(new TypeError("fetch failed"))).toBe(true);
+  });
+
+  it("retries a timeout", () => {
+    expect(
+      isRetryable(new DOMException("signal timed out", "TimeoutError")),
+    ).toBe(true);
+  });
+
+  it("retries a server error", () => {
+    expect(isRetryable(new ImportRequestError(500))).toBe(true);
+    expect(isRetryable(new ImportRequestError(503))).toBe(true);
+  });
+
+  it("retries when rate limited", () => {
+    expect(isRetryable(new ImportRequestError(429))).toBe(true);
+  });
+
+  it("does not retry a rejected batch", () => {
+    expect(isRetryable(new ImportRequestError(400))).toBe(false);
+  });
+
+  it("does not retry an expired session", () => {
+    expect(isRetryable(new ImportRequestError(401))).toBe(false);
+  });
+
+  it("does not retry a batch too large", () => {
+    expect(isRetryable(new ImportRequestError(413))).toBe(false);
+  });
+
+  it("does not retry other client errors", () => {
+    expect(isRetryable(new ImportRequestError(404))).toBe(false);
+  });
+});
+
 describe("sendErrorMessage", () => {
-  it("asks to log in again when the session has expired", () => {
-    expect(sendErrorMessage(new ImportRequestError(401))).toContain(
-      "reconnecte",
-    );
+  it("asks to log in again and drop the file again when the session has expired", () => {
+    const message = sendErrorMessage(new ImportRequestError(401));
+    expect(message).toContain("reconnecte-toi");
+    expect(message).toContain("dépose à nouveau activities.csv");
+    expect(message).toContain("déjà présentes");
+    expect(message).not.toContain("relance");
+  });
+
+  it("asks to reload the page when the batch was refused", () => {
+    for (const status of [400, 413]) {
+      expect(sendErrorMessage(new ImportRequestError(status))).toContain(
+        "refusé par le serveur",
+      );
+    }
   });
 
   it("offers to resume after a network or server error", () => {
@@ -254,6 +303,7 @@ describe("sendErrorMessage", () => {
       "Relance",
     );
     expect(sendErrorMessage(new ImportRequestError(500))).toContain("Relance");
+    expect(sendErrorMessage(new ImportRequestError(429))).toContain("Relance");
   });
 });
 
@@ -497,5 +547,34 @@ describe("postBatch", () => {
   it("lets a network failure through so that the import can be resumed", async () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("offline"));
     await expect(postBatch(makeRuns(1))).rejects.toBeInstanceOf(TypeError);
+  });
+
+  it("aborts a request that takes too long, on the resumable path", async () => {
+    const controller = new AbortController();
+    const timeoutSpy = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockReturnValue(controller.signal);
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () =>
+            reject(init.signal?.reason),
+          );
+        }),
+    );
+    const settled = postBatch(makeRuns(1)).catch((e: unknown) => e);
+    controller.abort(new DOMException("signal timed out", "TimeoutError"));
+    const error = await settled;
+    expect(timeoutSpy).toHaveBeenCalledWith(REQUEST_TIMEOUT_MS);
+    expect(REQUEST_TIMEOUT_MS).toBe(30_000);
+    expect(error).toBeInstanceOf(DOMException);
+    expect(isRetryable(error)).toBe(true);
+  });
+
+  it("rejects a response without integer counts, on the resumable path", async () => {
+    stubFetch(Response.json({ inserted: "1", alreadyPresent: 0.5 }));
+    const error = await postBatch(makeRuns(1)).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(isRetryable(error)).toBe(true);
   });
 });

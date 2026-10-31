@@ -132,11 +132,32 @@ export class ImportRequestError extends Error {
   }
 }
 
+// Vrai si renvoyer le même lot peut réussir : réseau coupé, délai dépassé, réponse illisible,
+// serveur en panne (5xx) ou limité (429). Les autres 4xx refusent le lot lui-même.
+export function isRetryable(error: unknown): boolean {
+  if (!(error instanceof ImportRequestError)) return true;
+  return error.status >= 500 || error.status === 429;
+}
+
 export function sendErrorMessage(error: unknown): string {
   if (error instanceof ImportRequestError && error.status === 401) {
-    return "Ta session a expiré : reconnecte-toi, puis relance l'import.";
+    return (
+      "Ta session a expiré : reconnecte-toi puis dépose à nouveau activities.csv. " +
+      "Les courses déjà envoyées seront comptées comme « déjà présentes », sans doublon."
+    );
+  }
+  if (!isRetryable(error)) {
+    return "Ce lot a été refusé par le serveur (données inattendues). Recharge la page et réessaie ; si ça persiste, signale-le.";
   }
   return "L'envoi d'un lot a échoué (connexion ou serveur). Relance l'import : il reprendra là où il s'est arrêté, sans doublon.";
+}
+
+export const REQUEST_TIMEOUT_MS = 30_000;
+
+function isBatchResult(body: unknown): body is BatchResult {
+  if (typeof body !== "object" || body === null) return false;
+  const { inserted, alreadyPresent } = body as Record<string, unknown>;
+  return Number.isSafeInteger(inserted) && Number.isSafeInteger(alreadyPresent);
 }
 
 export const postBatch: SendBatch = async (rows) => {
@@ -144,7 +165,10 @@ export const postBatch: SendBatch = async (rows) => {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ rows }),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   if (!response.ok) throw new ImportRequestError(response.status);
-  return (await response.json()) as BatchResult;
+  const body: unknown = await response.json();
+  if (!isBatchResult(body)) throw new Error("unexpected import response");
+  return body;
 };
