@@ -1,4 +1,4 @@
-// Allures d'entraînement depuis un chrono de référence : fonctions pures, déterministes, sans I/O.
+// Allures d'entraînement depuis un niveau (VDOT) estimé : fonctions pures, déterministes, sans I/O.
 //
 // Méthode VDOT de Jack Daniels (Daniels & Gilbert, « Oxygen Power », 1979 ;
 // J. Daniels, « Daniels' Running Formula », 3e éd., 2014) :
@@ -25,8 +25,7 @@ export type TrainingPaces = {
 export type PaceInput = {
   distanceM: number; // distance de l'objectif
   targetTimeS: number | null;
-  referenceDistanceM: number;
-  referenceTimeS: number;
+  vdot: number; // niveau estimé (src/core/fitness.ts)
 };
 
 // Pourcentages du VDOT. Daniels définit E à 59–74 % du VO2max ; on retient E 62–70 % et
@@ -93,7 +92,7 @@ function zone(score: number, [low, high]: readonly [number, number]) {
 }
 
 // 2862 s → « 47:42 », 13 774 s → « 3:49:34 ».
-function formatTime(totalSeconds: number): string {
+export function formatTime(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = String(totalSeconds % 60).padStart(2, "0");
@@ -108,12 +107,12 @@ function targetWarning(targetTimeS: number | null, predictedTimeS: number) {
   if (gap <= UNREALISTIC_TARGET_GAP) return null;
   return (
     `Ton chrono visé est au moins ${Math.floor(gap * 100)} % plus rapide que ce que prédit ` +
-    `ta référence. Un objectif réaliste serait autour de ${formatTime(predictedTimeS)}.`
+    `ton niveau actuel. Un objectif réaliste serait autour de ${formatTime(predictedTimeS)}.`
   );
 }
 
 export function trainingPaces(input: PaceInput): TrainingPaces {
-  const score = vdot(input.referenceDistanceM, input.referenceTimeS);
+  const score = input.vdot;
   const predictedTimeS = predictTimeS(score, input.distanceM);
   const racePace =
     (input.targetTimeS ?? predictedTimeS) / (input.distanceM / 1000);

@@ -1,5 +1,8 @@
 // Règles pures de l'objectif (sans I/O ni type Cloudflare) : partagées par l'API et le formulaire.
 
+import type { PaceBasis } from "../../core/fitness";
+import type { TrainingPaces } from "../../core/paces";
+
 // Distances en mètres entiers. Le semi (21 097,5 m) est arrondi au mètre supérieur : 21 098.
 // Plus rapide que le record du monde masculin (arrondi à la seconde) = chrono incohérent.
 export const RACE_DISTANCES = [
@@ -28,15 +31,14 @@ export type Goal = {
   distanceM: number;
   raceDate: string; // AAAA-MM-JJ
   targetTimeS: number | null; // optionnel : null = finir la course, sans chrono visé
-  referenceDistanceM: number;
-  referenceTimeS: number;
   availableDays: number[]; // jours ISO, uniques, triés
 };
 
-// Objectif enregistré : le chrono de référence peut manquer sur une ligne antérieure à #13.
-export type SavedGoal = Omit<Goal, "referenceDistanceM" | "referenceTimeS"> & {
-  referenceDistanceM: number | null;
-  referenceTimeS: number | null;
+// Réponse de GET et PUT /api/goal.
+export type GoalResponse = {
+  goal: Goal | null;
+  paces: TrainingPaces | null; // null sans objectif ou sans course exploitable
+  basis: PaceBasis | null; // null sans course exploitable sur 8 semaines
 };
 
 export type GoalField = keyof Goal;
@@ -100,7 +102,8 @@ function daysError(value: unknown): string | null {
   return null;
 }
 
-// Valide une saisie non fiable. La course doit être strictement après `today` (AAAA-MM-JJ) :
+// Valide une saisie non fiable ; les champs inconnus (dont l'ancien chrono de référence, #46)
+// sont ignorés. La course doit être strictement après `today` (AAAA-MM-JJ) :
 // une course le jour même ne laisse aucune séance à planifier.
 export function validateGoal(input: unknown, today: string): GoalValidation {
   const raw = (
@@ -112,10 +115,6 @@ export function validateGoal(input: unknown, today: string): GoalValidation {
 
   const distance = raceDistance(raw.distanceM);
   if (!distance) errors.distanceM = "Choisis une distance cible.";
-  const reference = raceDistance(raw.referenceDistanceM);
-  if (!reference) {
-    errors.referenceDistanceM = "Choisis la distance du chrono de référence.";
-  }
 
   // Fuseau : le serveur passe la date UTC, le front sa date locale (au moins aussi stricte
   // en France). Seule la validation serveur fait foi ; celle du front sert à l'affichage.
@@ -129,10 +128,6 @@ export function validateGoal(input: unknown, today: string): GoalValidation {
     const error = timeError(targetTimeS, distance.distanceM);
     if (error) errors.targetTimeS = error;
   }
-  if (reference) {
-    const error = timeError(raw.referenceTimeS, reference.distanceM);
-    if (error) errors.referenceTimeS = error;
-  }
 
   const dayError = daysError(raw.availableDays);
   if (dayError) errors.availableDays = dayError;
@@ -144,8 +139,6 @@ export function validateGoal(input: unknown, today: string): GoalValidation {
       distanceM: raw.distanceM as number,
       raceDate: raw.raceDate as string,
       targetTimeS: targetTimeS as number | null,
-      referenceDistanceM: raw.referenceDistanceM as number,
-      referenceTimeS: raw.referenceTimeS as number,
       availableDays: [...(raw.availableDays as number[])].sort((a, b) => a - b),
     },
   };

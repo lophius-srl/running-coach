@@ -6,8 +6,6 @@ const valid: Goal = {
   distanceM: 10000,
   raceDate: "2027-04-11",
   targetTimeS: 2700,
-  referenceDistanceM: 5000,
-  referenceTimeS: 1380,
   availableDays: [6, 2, 4],
 };
 
@@ -58,7 +56,6 @@ describe("validateGoal", () => {
       "availableDays",
       "distanceM",
       "raceDate",
-      "referenceDistanceM",
     ]);
   });
 
@@ -68,10 +65,14 @@ describe("validateGoal", () => {
     );
   });
 
-  it("rejects an unknown reference distance", () => {
-    expect(
-      errorsOf({ ...valid, referenceDistanceM: 3000 }).referenceDistanceM,
-    ).toBeDefined();
+  // #46 : le chrono de référence n'existe plus ; un ancien client qui l'envoie n'est pas bloqué.
+  it("ignores a legacy reference time, valid or not, and drops it", () => {
+    const legacy = { ...valid, referenceDistanceM: 3000, referenceTimeS: "x" };
+
+    expect(validateGoal(legacy, TODAY)).toEqual({
+      ok: true,
+      goal: { ...valid, availableDays: [2, 4, 6] },
+    });
   });
 
   it.each([TODAY, "2026-10-29"])("rejects the past or today (%s)", (date) => {
@@ -128,18 +129,10 @@ describe("validateGoal", () => {
   });
 
   it("rejects a pace slower than 15 min/km", () => {
-    expect(errorsOf({ ...valid, referenceTimeS: 4501 }).referenceTimeS).toBe(
+    expect(errorsOf({ ...valid, targetTimeS: 9001 }).targetTimeS).toBe(
       "Ce chrono correspond à une allure plus lente que 15 min/km.",
     );
-    expect(validateGoal({ ...valid, referenceTimeS: 4500 }, TODAY).ok).toBe(
-      true,
-    );
-  });
-
-  it("requires a reference time", () => {
-    expect(
-      errorsOf({ ...valid, referenceTimeS: null }).referenceTimeS,
-    ).toBeDefined();
+    expect(validateGoal({ ...valid, targetTimeS: 9000 }, TODAY).ok).toBe(true);
   });
 
   it.each([[[]], [[3]]])("rejects fewer than 2 days (%j)", (availableDays) => {
@@ -240,48 +233,11 @@ describe("validateGoal edge cases", () => {
     },
   );
 
-  it.each([
-    [5000, 755, 754, 4500, 4501],
-    [10000, 1571, 1570, 9000, 9001],
-    [21098, 3402, 3401, 18988, 18989],
-    [42195, 7235, 7234, 37975, 37976],
-  ])(
-    "bounds the reference time on %i m (record %i s, max %i s)",
-    (referenceDistanceM, record, faster, slowest, slower) => {
-      const errorsFor = (referenceTimeS: number) =>
-        errorsOf({ ...valid, referenceDistanceM, referenceTimeS })
-          .referenceTimeS;
-
-      expect(errorsFor(record)).toBeUndefined();
-      expect(errorsFor(faster)).toMatch(/record du monde/);
-      expect(errorsFor(slowest)).toBeUndefined();
-      expect(errorsFor(slower)).toMatch(/15 min\/km/);
-    },
-  );
-
   it("rejects an empty string as target time (only null means no target)", () => {
     expect(errorsOf({ ...valid, targetTimeS: "" }).targetTimeS).toMatch(
       /h:mm:ss ou mm:ss/,
     );
   });
-
-  it.each([0, -60, Number.NaN, "23:00", undefined])(
-    "rejects the reference time %j",
-    (referenceTimeS) => {
-      expect(errorsOf({ ...valid, referenceTimeS }).referenceTimeS).toMatch(
-        /h:mm:ss ou mm:ss/,
-      );
-    },
-  );
-
-  it.each([21097.5, "5000", null])(
-    "rejects the reference distance %j",
-    (referenceDistanceM) => {
-      expect(
-        errorsOf({ ...valid, referenceDistanceM }).referenceDistanceM,
-      ).toBe("Choisis la distance du chrono de référence.");
-    },
-  );
 
   it("accepts every day of the week", () => {
     const result = validateGoal(

@@ -16,6 +16,12 @@ export type RunSample = {
   movingTimeS: number;
 };
 
+// Course d'où vient le niveau, affichée pour expliquer les allures.
+export type PaceBasis = Pick<
+  RunSample,
+  "startDate" | "distanceM" | "movingTimeS"
+>;
+
 export type Fitness = {
   vdot: number;
   run: RunSample; // course retenue, affichée pour expliquer le calcul
