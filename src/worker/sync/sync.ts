@@ -2,7 +2,11 @@
 // Ne stocke que les courses des 7 derniers jours ; purge tout ce qui a été récupéré il y a plus de 7 jours.
 
 import type { Bindings } from "../env";
-import { stravaApiFetch, StravaError } from "../strava/client";
+import {
+  stravaApiFetch,
+  StravaError,
+  StravaReauthorizationRequired,
+} from "../strava/client";
 import { partitionActivities, purgeCutoff, syncWindowStart } from "./rules";
 import { deleteActivity, upsertActivity } from "./store";
 
@@ -84,6 +88,7 @@ export async function runSync(
 }
 
 // Cron quotidien : purge globale, puis synchro de chaque utilisateur connecté (tokens présents).
+// Un accès révoqué (401, refresh refusé) supprime tokens et activités sans faire échouer le run.
 // L'échec d'un utilisateur n'empêche pas la synchro des autres ; il est relancé à la fin
 // pour que l'exécution apparaisse en échec dans l'observabilité Cloudflare.
 export async function runDailySync(
@@ -99,7 +104,8 @@ export async function runDailySync(
     try {
       await syncUserActivities(env, userId, nowMs);
     } catch (err) {
-      failure ??= err;
+      // Accès révoqué : les données sont déjà supprimées, ce n'est pas un échec du cron.
+      if (!(err instanceof StravaReauthorizationRequired)) failure ??= err;
     }
   }
   if (failure !== null) throw failure;

@@ -6,7 +6,7 @@ import { goalRoutes } from "./goals/routes";
 import { historyRoutes } from "./history/routes";
 import { planRoutes } from "./plans/routes";
 import type { AppEnv, Bindings } from "./env";
-import { StravaError } from "./strava/client";
+import { StravaError, StravaReauthorizationRequired } from "./strava/client";
 import { runDailySync, runSync } from "./sync/sync";
 import { webhookRoutes } from "./webhook/routes";
 
@@ -54,6 +54,9 @@ app.post("/api/sync", async (c) => {
   try {
     return c.json(await runSync(c.env, c.get("userId"), Date.now()));
   } catch (err) {
+    if (err instanceof StravaReauthorizationRequired) {
+      return c.json({ error: "strava_reauthorization_required" }, 401);
+    }
     if (err instanceof StravaError) return c.json({ error: "strava" }, 502);
     throw err;
   }

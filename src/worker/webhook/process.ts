@@ -2,7 +2,11 @@
 // signés, chaque action est confirmée auprès de l'API Strava avant d'écrire en base.
 
 import type { Bindings } from "../env";
-import { stravaApiFetch, StravaError } from "../strava/client";
+import {
+  stravaApiFetch,
+  StravaError,
+  StravaReauthorizationRequired,
+} from "../strava/client";
 import { deleteStravaData } from "../strava/revocation";
 import { deleteActivity, upsertActivity } from "../sync/store";
 import { decideActivity, type WebhookAction } from "./rules";
@@ -67,7 +71,7 @@ async function syncActivity(
   await statement.run();
 }
 
-export async function processWebhookAction(
+async function applyWebhookAction(
   env: Bindings,
   action: WebhookAction,
   nowMs: number,
@@ -107,5 +111,18 @@ export async function processWebhookAction(
       if (decision.kind === "store") return;
       await deleteActivity(env.DB, userId, action.activityId).run();
     }
+  }
+}
+
+// Accès révoqué pendant le traitement : tokens et activités sont déjà supprimés, rien à signaler.
+export async function processWebhookAction(
+  env: Bindings,
+  action: WebhookAction,
+  nowMs: number,
+): Promise<void> {
+  try {
+    await applyWebhookAction(env, action, nowMs);
+  } catch (err) {
+    if (!(err instanceof StravaReauthorizationRequired)) throw err;
   }
 }

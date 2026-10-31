@@ -4,13 +4,31 @@ export type SyncState =
   | { status: "idle" }
   | { status: "running" }
   | { status: "done"; imported: number }
-  | { status: "failed" };
+  | { status: "failed" }
+  | { status: "revoked" };
+
+// Réponse de POST /api/sync → état affiché. 401 strava_reauthorization_required : accès Strava
+// révoqué (tokens et activités déjà supprimés côté serveur), il faut se reconnecter.
+export function syncStateFrom(status: number, body: unknown): SyncState {
+  const data = (typeof body === "object" && body !== null ? body : {}) as {
+    imported?: unknown;
+    error?: unknown;
+  };
+  if (status === 401 && data.error === "strava_reauthorization_required") {
+    return { status: "revoked" };
+  }
+  if (status !== 200 || typeof data.imported !== "number") {
+    return { status: "failed" };
+  }
+  return { status: "done", imported: data.imported };
+}
 
 async function requestSync(): Promise<SyncState> {
   const response = await fetch("/api/sync", { method: "POST" });
-  if (!response.ok) return { status: "failed" };
-  const { imported } = (await response.json()) as { imported: number };
-  return { status: "done", imported };
+  return syncStateFrom(
+    response.status,
+    await response.json().catch(() => null),
+  );
 }
 
 // Synchronisation Strava, tenue au niveau de l'app : changer d'onglet pendant une sync n'en perd

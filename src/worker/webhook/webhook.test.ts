@@ -740,7 +740,7 @@ describe("POST /api/strava/webhook (activity edge cases)", () => {
     expect((await activities()).map((a) => a.id)).toContain(12);
   });
 
-  it("keeps stored data when the token refresh is refused on update", async () => {
+  it("deletes tokens and activities when the token refresh is refused on update", async () => {
     await env.DB.prepare(
       "UPDATE oauth_tokens SET expires_at = 0 WHERE user_id = 1",
     ).run();
@@ -748,9 +748,21 @@ describe("POST /api/strava/webhook (activity edge cases)", () => {
       "/oauth/token": () => new Response("{}", { status: 400 }),
     });
 
-    await expect(deliver(activityEvent("update", 10))).rejects.toThrow();
+    await deliver(activityEvent("update", 10));
 
-    expect((await activities()).map((a) => a.id)).toEqual([10, 11, 20]);
+    expect(await count("oauth_tokens", 1)).toBe(0);
+    expect((await activities()).map((a) => a.id)).toEqual([20]);
+  });
+
+  it("deletes tokens and activities when the API answers 401 on create", async () => {
+    mockStrava({
+      "/api/v3/activities/12": () => new Response("{}", { status: 401 }),
+    });
+
+    await deliver(activityEvent("create", 12));
+
+    expect(await count("oauth_tokens", 1)).toBe(0);
+    expect((await activities()).map((a) => a.id)).toEqual([20]);
   });
 
   it("does nothing when the owner has not connected yet", async () => {

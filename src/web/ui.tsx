@@ -15,3 +15,17 @@ export function Alert({ message }: { message: string }) {
     </p>
   );
 }
+
+// Bouton officiel du kit de marque Strava (https://developers.strava.com/guidelines/), non modifié.
+export function ConnectWithStrava() {
+  return (
+    <a className="strava-connect" href="/api/auth/strava">
+      <img
+        src="/strava/btn_strava_connect_with_orange.svg"
+        width={237}
+        height={48}
+        alt="Connect with Strava"
+      />
+    </a>
+  );
+}
