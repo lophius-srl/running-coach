@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { parseDuration, utcIsoDate, validateGoal, type Goal } from "./rules";
+import {
+  APP_TIME_ZONE,
+  localIsoDate,
+  parseDuration,
+  validateGoal,
+  type Goal,
+} from "./rules";
 
 const TODAY = "2026-10-30";
 const valid: Goal = {
@@ -32,9 +38,20 @@ describe("parseDuration", () => {
   );
 });
 
-describe("utcIsoDate", () => {
-  it("returns the UTC calendar date", () => {
-    expect(utcIsoDate(Date.parse("2026-10-30T23:30:00Z"))).toBe("2026-10-30");
+describe("localIsoDate", () => {
+  const paris = (iso: string) => localIsoDate(Date.parse(iso), APP_TIME_ZONE);
+
+  it("returns the calendar date in Paris, in winter and summer time", () => {
+    expect(paris("2026-11-02T22:59:59.999Z")).toBe("2026-11-02");
+    expect(paris("2026-11-02T23:30:00Z")).toBe("2026-11-03");
+    expect(paris("2026-07-01T21:59:59.999Z")).toBe("2026-07-01");
+    expect(paris("2026-07-01T22:30:00Z")).toBe("2026-07-02");
+  });
+
+  it("follows the requested time zone", () => {
+    expect(localIsoDate(Date.parse("2026-10-30T23:30:00Z"), "UTC")).toBe(
+      "2026-10-30",
+    );
   });
 });
 
@@ -180,17 +197,6 @@ describe("parseDuration edge cases", () => {
 
     expect(errorsOf({ ...valid, targetTimeS: seconds }).targetTimeS).toMatch(
       /h:mm:ss ou mm:ss/,
-    );
-  });
-});
-
-describe("utcIsoDate at midnight", () => {
-  it("switches to the next day exactly at 00:00 UTC", () => {
-    expect(utcIsoDate(Date.parse("2026-10-30T23:59:59.999Z"))).toBe(
-      "2026-10-30",
-    );
-    expect(utcIsoDate(Date.parse("2026-10-31T00:00:00.000Z"))).toBe(
-      "2026-10-31",
     );
   });
 });

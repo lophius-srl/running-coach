@@ -189,6 +189,31 @@ describe("/api/plan", () => {
     expect(await (await callPlan(1)).json()).toEqual({ plan });
   });
 
+  it.each([
+    ["2026-11-02T23:30:00.000Z", "2026-11-03"], // 00:30 à Paris (UTC+1)
+    ["2026-07-01T22:30:00.000Z", "2026-07-02"], // 00:30 à Paris (UTC+2, heure d'été)
+  ])("starts the week on the Paris date at %s", async (now, weekStart) => {
+    vi.setSystemTime(new Date(now));
+    await saveGoal(1);
+    await env.DB.prepare(
+      `INSERT INTO imported_activities (user_id, id, start_date, sport_type, distance_m, moving_time_s)
+       VALUES (1, 1, ?, 'Run', 5000, 1380)`,
+    )
+      .bind(new Date(Date.parse(now) - 3 * 86_400_000).toISOString())
+      .run();
+    const { plan } = await (await callPlan(1, "POST")).json<PlanResponse>();
+    expect(plan?.weekStart).toBe(weekStart);
+  });
+
+  it("refuses to generate on race day from 00:30 Paris time", async () => {
+    await saveGoal(1, "2026-11-03");
+    await importRun(1, 1, 1380);
+    vi.setSystemTime(new Date("2026-11-02T23:30:00.000Z"));
+    const response = await callPlan(1, "POST");
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "race_passed" });
+  });
+
   it("keeps each user's plan separate", async () => {
     await saveGoal(1);
     await importRun(1, 1, 1380);

@@ -4,7 +4,8 @@ import type { Fitness } from "../../core/fitness";
 import { trainingPaces } from "../../core/paces";
 import { loadFitness } from "./fitness";
 import {
-  utcIsoDate,
+  APP_TIME_ZONE,
+  localIsoDate,
   validateGoal,
   type Goal,
   type GoalResponse,
@@ -73,7 +74,7 @@ goalRoutes.get("/", async (c) => {
 goalRoutes.put("/", async (c) => {
   const body: unknown = await c.req.json().catch(() => null);
   const nowMs = Date.now();
-  const result = validateGoal(body, utcIsoDate(nowMs));
+  const result = validateGoal(body, localIsoDate(nowMs, APP_TIME_ZONE));
   if (!result.ok) return c.json({ errors: result.errors }, 400);
 
   const { goal } = result;

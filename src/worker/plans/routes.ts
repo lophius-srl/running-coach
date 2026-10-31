@@ -13,7 +13,7 @@ import {
 } from "../../core/plan";
 import { loadFitness } from "../goals/fitness";
 import { toGoal, type GoalRow } from "../goals/routes";
-import { utcIsoDate, type Goal } from "../goals/rules";
+import { APP_TIME_ZONE, localIsoDate, type Goal } from "../goals/rules";
 import { withTargetPaces, type PlanError } from "./view";
 
 type PlanRow = {
@@ -102,7 +102,10 @@ planRoutes.post("/", async (c) => {
   const refuse = (error: PlanError) => c.json({ error }, 409);
   if (goalId === null || goal === null) return refuse("no_goal");
   if (paces === null) return refuse("no_paces");
-  const plan = generateWeekPlan({ ...goal, today: utcIsoDate(nowMs) });
+  const plan = generateWeekPlan({
+    ...goal,
+    today: localIsoDate(nowMs, APP_TIME_ZONE),
+  });
   if (plan === null) return refuse("race_passed");
 
   await db.batch([

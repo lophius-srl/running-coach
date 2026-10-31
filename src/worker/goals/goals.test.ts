@@ -294,8 +294,8 @@ describe("/api/goal", () => {
     expect(await goalRows()).toHaveLength(1);
   });
 
-  it("accepts tomorrow until 23:59:59 UTC", async () => {
-    vi.setSystemTime(new Date("2026-10-30T23:59:59.999Z"));
+  it("accepts tomorrow until 23:59:59 Paris time", async () => {
+    vi.setSystemTime(new Date("2026-10-30T22:59:59.999Z")); // 23:59:59 à Paris (UTC+1)
 
     const response = await putGoal(
       1,
@@ -305,8 +305,8 @@ describe("/api/goal", () => {
     expect(response.status).toBe(200);
   });
 
-  it("rejects that date once it is today in UTC", async () => {
-    vi.setSystemTime(new Date("2026-10-31T00:00:00.000Z"));
+  it("rejects that date once it is today in Paris", async () => {
+    vi.setSystemTime(new Date("2026-10-30T23:30:00.000Z")); // 00:30 le 31 à Paris
 
     const response = await putGoal(
       1,
