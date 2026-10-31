@@ -56,8 +56,37 @@ describe("parseWebhookEvent", () => {
     ["a string object id", { ...activityEvent("create"), object_id: "1001" }],
     ["a negative owner id", { ...activityEvent("create"), owner_id: -1 }],
     ["a missing owner id", { ...activityEvent("create"), owner_id: undefined }],
+    ["a string owner id", { ...activityEvent("create"), owner_id: "42" }],
+    ["a decimal object id", { ...activityEvent("create"), object_id: 1.5 }],
+    ["a zero object id", { ...activityEvent("create"), object_id: 0 }],
+    [
+      "an unsafe integer object id",
+      { ...activityEvent("create"), object_id: Number.MAX_SAFE_INTEGER + 1 },
+    ],
   ])("rejects %s", (_label, body) => {
     expect(parseWebhookEvent(body)).toBeNull();
+  });
+});
+
+describe("parseWebhookEvent authorized flag", () => {
+  const athleteEvent = (updates: unknown) => ({
+    object_type: "athlete",
+    object_id: OWNER,
+    aspect_type: "update",
+    owner_id: OWNER,
+    updates,
+  });
+
+  it.each([
+    ["the string true", { authorized: "true" }],
+    ["the boolean true", { authorized: true }],
+    ["another casing of false", { authorized: "False" }],
+    ["zero", { authorized: 0 }],
+    ["no authorized field", {}],
+    ["no updates object", undefined],
+    ["updates sent as a string", "authorized=false"],
+  ])("does not flag a deauthorization for %s", (_label, updates) => {
+    expect(parseWebhookEvent(athleteEvent(updates))?.deauthorized).toBe(false);
   });
 });
 

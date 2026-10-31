@@ -405,3 +405,483 @@ describe("POST /api/strava/webhook (ignored events)", () => {
     expect((await activities()).map((a) => a.id)).toEqual([10, 11, 20]);
   });
 });
+
+// Corps envoyé au POST sans passer par JSON.stringify ni Content-Type automatique.
+async function postRaw(body: string, headers: Record<string, string> = {}) {
+  const ctx = createExecutionContext();
+  const waitUntil = vi.spyOn(ctx, "waitUntil");
+  const response = await app.fetch(
+    new Request("https://coach.example/api/strava/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body,
+    }),
+    testEnv,
+    ctx,
+  );
+  await waitOnExecutionContext(ctx);
+  return { response, waitUntil };
+}
+
+async function postWith(body: unknown, bindings: Bindings = testEnv) {
+  const ctx = createExecutionContext();
+  const waitUntil = vi.spyOn(ctx, "waitUntil");
+  const response = await app.fetch(
+    new Request("https://coach.example/api/strava/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    bindings,
+    ctx,
+  );
+  await waitOnExecutionContext(ctx);
+  return { response, waitUntil };
+}
+
+describe("GET /api/strava/webhook (edge cases)", () => {
+  const valid = {
+    "hub.mode": "subscribe",
+    "hub.challenge": "abc",
+    "hub.verify_token": VERIFY_TOKEN,
+  };
+
+  it("returns 403 when the verify token parameter is missing", async () => {
+    const response = await verify({
+      "hub.mode": "subscribe",
+      "hub.challenge": "abc",
+    });
+
+    expect(response.status).toBe(403);
+  });
+
+  it.each([
+    ["a prefix of the expected token", VERIFY_TOKEN.slice(0, -1)],
+    ["the expected token with a suffix", `${VERIFY_TOKEN}x`],
+    ["the expected token in another case", VERIFY_TOKEN.toUpperCase()],
+    ["the expected token with spaces", ` ${VERIFY_TOKEN} `],
+  ])("returns 403 for %s", async (_label, token) => {
+    const response = await verify({ ...valid, "hub.verify_token": token });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("returns 403 when the verify token binding is absent", async () => {
+    const query = new URLSearchParams(valid);
+    const response = await app.request(
+      `/api/strava/webhook?${query}`,
+      {},
+      { ...testEnv, STRAVA_WEBHOOK_VERIFY_TOKEN: undefined },
+    );
+
+    expect(response.status).toBe(403);
+  });
+
+  it("returns 403 before checking the mode when the token is wrong", async () => {
+    const response = await verify({
+      "hub.challenge": "abc",
+      "hub.verify_token": "nope",
+    });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("returns 400 when the mode is missing", async () => {
+    const response = await verify({
+      "hub.challenge": "abc",
+      "hub.verify_token": VERIFY_TOKEN,
+    });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("returns 400 when the challenge is missing", async () => {
+    const response = await verify({
+      "hub.mode": "subscribe",
+      "hub.verify_token": VERIFY_TOKEN,
+    });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("echoes a challenge of the maximum accepted length", async () => {
+    const challenge = "a".repeat(256);
+
+    const response = await verify({ ...valid, "hub.challenge": challenge });
+
+    expect(await response.json()).toEqual({ "hub.challenge": challenge });
+  });
+});
+
+describe("POST /api/strava/webhook (ignored bodies and deferred work)", () => {
+  it.each([
+    [
+      "an owner id sent as a string",
+      { ...activityEvent("create", 12), owner_id: "42" },
+    ],
+    [
+      "an object id sent as a string",
+      { ...activityEvent("create", 12), object_id: "12" },
+    ],
+    [
+      "a non integer object id",
+      { ...activityEvent("create", 12), object_id: 12.5 },
+    ],
+    ["a zero object id", { ...activityEvent("create", 12), object_id: 0 }],
+    [
+      "an unknown aspect type",
+      { ...activityEvent("create", 12), aspect_type: "archive" },
+    ],
+    [
+      "a missing object type",
+      { ...activityEvent("create", 12), object_type: undefined },
+    ],
+    ["a JSON array", [activityEvent("create", 12)]],
+    ["a JSON null", null],
+    [
+      'an athlete event with authorized "true"',
+      { ...deauthorization(), updates: { authorized: "true" } },
+    ],
+    [
+      "an athlete event without updates.authorized",
+      { ...deauthorization(), updates: {} },
+    ],
+    [
+      "an athlete event without updates",
+      { ...deauthorization(), updates: undefined },
+    ],
+  ])("answers 200 without deferred work for %s", async (_label, body) => {
+    const fetchSpy = mockStrava({});
+
+    const { response, waitUntil } = await postWith(body);
+
+    expect(response.status).toBe(200);
+    expect(waitUntil).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(await count("oauth_tokens", 1)).toBe(1);
+    expect((await activities()).map((a) => a.id)).toEqual([10, 11, 20]);
+  });
+
+  it("ignores every event when OWNER_ATHLETE_ID is not configured", async () => {
+    const fetchSpy = mockStrava({});
+
+    const { response, waitUntil } = await postWith(deauthorization(), {
+      ...testEnv,
+      OWNER_ATHLETE_ID: undefined,
+    });
+
+    expect(response.status).toBe(200);
+    expect(waitUntil).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(await count("oauth_tokens", 1)).toBe(1);
+  });
+
+  it("does not schedule work for another athlete's event", async () => {
+    const { waitUntil } = await postWith(activityEvent("create", 12, 43));
+
+    expect(waitUntil).not.toHaveBeenCalled();
+  });
+
+  it("schedules the processing with waitUntil for an owner event", async () => {
+    mockStrava({ "/api/v3/activities/12": () => Response.json(run(12)) });
+
+    const { waitUntil } = await postWith(activityEvent("create", 12));
+
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers 200 with an empty body even when the deferred processing fails", async () => {
+    mockStrava({
+      "/api/v3/activities/12": () => new Response("{}", { status: 503 }),
+    });
+
+    const { response, done } = await post(activityEvent("create", 12));
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("");
+    await expect(done()).rejects.toThrow();
+  });
+
+  it("ignores a body whose declared length exceeds 4 KiB", async () => {
+    const fetchSpy = mockStrava({});
+    const body = JSON.stringify(activityEvent("delete", 10));
+
+    const { waitUntil } = await postRaw(body, { "Content-Length": "4097" });
+
+    expect(waitUntil).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect((await activities()).map((a) => a.id)).toEqual([10, 11, 20]);
+  });
+
+  it("accepts a valid event padded up to exactly 4 KiB", async () => {
+    mockStrava({});
+    const event = JSON.stringify(activityEvent("delete", 10));
+    const body = event.replace(
+      "{",
+      `{"pad":"${"x".repeat(4096 - event.length - 9)}",`,
+    );
+    expect(body.length).toBe(4096);
+
+    const { waitUntil } = await postRaw(body);
+
+    expect(waitUntil).toHaveBeenCalledTimes(1);
+    expect((await activities()).map((a) => a.id)).toEqual([11, 20]);
+  });
+
+  it("ignores an empty body", async () => {
+    const { response, waitUntil } = await postRaw("");
+
+    expect(response.status).toBe(200);
+    expect(waitUntil).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/strava/webhook (activity edge cases)", () => {
+  it("does nothing on delete of an unknown activity", async () => {
+    mockStrava({});
+
+    const response = await deliver(activityEvent("delete", 999));
+
+    expect(response.status).toBe(200);
+    expect((await activities()).map((a) => a.id)).toEqual([10, 11, 20]);
+  });
+
+  it("stores nothing on create when Strava answers 404", async () => {
+    mockStrava({});
+
+    await deliver(activityEvent("create", 12));
+
+    expect((await activities()).map((a) => a.id)).toEqual([10, 11, 20]);
+  });
+
+  it("does not store a ride on create", async () => {
+    mockStrava({
+      "/api/v3/activities/12": () =>
+        Response.json(run(12, { sport_type: "Ride", type: "Ride" })),
+    });
+
+    await deliver(activityEvent("create", 12));
+
+    expect((await activities()).map((a) => a.id)).toEqual([10, 11, 20]);
+  });
+
+  it("keeps stored data when Strava returns a body for another activity id", async () => {
+    mockStrava({ "/api/v3/activities/10": () => Response.json(run(77)) });
+
+    await expect(deliver(activityEvent("update", 10))).rejects.toThrow();
+
+    expect((await activities()).map((a) => a.id)).toEqual([10, 11, 20]);
+  });
+
+  it("keeps stored data when Strava returns invalid JSON on update", async () => {
+    mockStrava({ "/api/v3/activities/10": () => new Response("<html>") });
+
+    await expect(deliver(activityEvent("update", 10))).rejects.toThrow();
+
+    expect((await activities()).map((a) => a.id)).toEqual([10, 11, 20]);
+  });
+
+  it("deletes the activity on delete when Strava answers 5xx", async () => {
+    mockStrava({
+      "/api/v3/activities/10": () => new Response("{}", { status: 502 }),
+    });
+
+    await deliver(activityEvent("delete", 10));
+
+    expect((await activities()).map((a) => a.id)).toEqual([11, 20]);
+  });
+
+  it("deletes the activity on delete when Strava still serves it as a ride", async () => {
+    mockStrava({
+      "/api/v3/activities/10": () =>
+        Response.json(run(10, { sport_type: "Ride", type: "Ride" })),
+    });
+
+    await deliver(activityEvent("delete", 10));
+
+    expect((await activities()).map((a) => a.id)).toEqual([11, 20]);
+  });
+
+  it("never overwrites another user's activity with the same id", async () => {
+    mockStrava({ "/api/v3/activities/20": () => Response.json(run(20)) });
+
+    await deliver(activityEvent("update", 20));
+
+    const stored = (await activities()).find((a) => a.id === 20);
+    expect(stored?.user_id).toBe(2);
+    expect(stored?.payload).toBe("{}");
+  });
+
+  it("does not delete another user's activity with the same id", async () => {
+    mockStrava({});
+
+    await deliver(activityEvent("delete", 20));
+
+    expect(await count("strava_activities", 2)).toBe(1);
+  });
+
+  it("refreshes an expired token before fetching the activity", async () => {
+    await env.DB.prepare(
+      "UPDATE oauth_tokens SET expires_at = 0 WHERE user_id = 1",
+    ).run();
+    const fetchSpy = mockStrava({
+      "/oauth/token": () =>
+        Response.json({
+          access_token: "fresh-access",
+          refresh_token: "fresh-refresh",
+          expires_at: 9999999999,
+        }),
+      "/api/v3/activities/12": () => Response.json(run(12)),
+    });
+
+    await deliver(activityEvent("create", 12));
+
+    const [, init] = fetchSpy.mock.calls[1];
+    expect(new Headers(init?.headers).get("Authorization")).toBe(
+      "Bearer fresh-access",
+    );
+    const token = await env.DB.prepare(
+      "SELECT access_token FROM oauth_tokens WHERE user_id = 1",
+    ).first<{ access_token: string }>();
+    expect(token?.access_token).toBe("fresh-access");
+    expect((await activities()).map((a) => a.id)).toContain(12);
+  });
+
+  it("keeps stored data when the token refresh is refused on update", async () => {
+    await env.DB.prepare(
+      "UPDATE oauth_tokens SET expires_at = 0 WHERE user_id = 1",
+    ).run();
+    mockStrava({
+      "/oauth/token": () => new Response("{}", { status: 400 }),
+    });
+
+    await expect(deliver(activityEvent("update", 10))).rejects.toThrow();
+
+    expect((await activities()).map((a) => a.id)).toEqual([10, 11, 20]);
+  });
+
+  it("does nothing when the owner has not connected yet", async () => {
+    await env.DB.prepare(
+      "DELETE FROM strava_activities WHERE user_id = 1",
+    ).run();
+    await env.DB.prepare("DELETE FROM oauth_tokens WHERE user_id = 1").run();
+    await env.DB.prepare("DELETE FROM imported_activities").run();
+    await env.DB.prepare("DELETE FROM plans").run();
+    await env.DB.prepare("DELETE FROM goals").run();
+    await env.DB.prepare("DELETE FROM users WHERE id = 1").run();
+    const fetchSpy = mockStrava({});
+
+    const response = await deliver(activityEvent("create", 12));
+
+    expect(response.status).toBe(200);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/strava/webhook (deauthorization edge cases)", () => {
+  beforeEach(async () => {
+    await env.DB.prepare(
+      "INSERT INTO plan_sessions (plan_id, scheduled_date, kind) VALUES (1, '2026-11-03', 'endurance')",
+    ).run();
+  });
+
+  const revoked = () =>
+    mockStrava({
+      "/api/v3/athlete": () => new Response("{}", { status: 401 }),
+    });
+
+  it("keeps the user row, goal, plan, plan sessions and imported history", async () => {
+    revoked();
+
+    await deliver(deauthorization());
+
+    const user = await env.DB.prepare(
+      "SELECT strava_athlete_id FROM users WHERE id = 1",
+    ).first<{ strava_athlete_id: number }>();
+    expect(user?.strava_athlete_id).toBe(OWNER);
+    expect(await count("goals", 1)).toBe(1);
+    expect(await count("imported_activities", 1)).toBe(1);
+    const sessions = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM plan_sessions",
+    ).first<{ n: number }>();
+    expect(sessions?.n).toBe(1);
+  });
+
+  it("accepts authorized sent as the boolean false", async () => {
+    revoked();
+
+    await deliver({ ...deauthorization(), updates: { authorized: false } });
+
+    expect(await count("oauth_tokens", 1)).toBe(0);
+    expect(await count("strava_activities", 1)).toBe(0);
+  });
+
+  it("confirms the deauthorization with the stored token", async () => {
+    const fetchSpy = revoked();
+
+    await deliver(deauthorization());
+
+    const [input, init] = fetchSpy.mock.calls[0];
+    expect(String(input)).toBe("https://www.strava.com/api/v3/athlete");
+    expect(new Headers(init?.headers).get("Authorization")).toBe(
+      "Bearer token-1",
+    );
+  });
+
+  it("deletes everything when the expired token cannot be refreshed", async () => {
+    await env.DB.prepare(
+      "UPDATE oauth_tokens SET expires_at = 0 WHERE user_id = 1",
+    ).run();
+    mockStrava({ "/oauth/token": () => new Response("{}", { status: 400 }) });
+
+    await deliver(deauthorization());
+
+    expect(await count("oauth_tokens", 1)).toBe(0);
+    expect(await count("strava_activities", 1)).toBe(0);
+  });
+
+  it.each([429, 500, 503])(
+    "deletes everything when Strava answers %s to the confirmation",
+    async (status) => {
+      mockStrava({
+        "/api/v3/athlete": () => new Response("{}", { status }),
+      });
+
+      await deliver(deauthorization());
+
+      expect(await count("oauth_tokens", 1)).toBe(0);
+      expect(await count("strava_activities", 1)).toBe(0);
+    },
+  );
+
+  it("deletes the activities even when the tokens are already gone", async () => {
+    await env.DB.prepare("DELETE FROM oauth_tokens WHERE user_id = 1").run();
+    const fetchSpy = mockStrava({});
+
+    await deliver(deauthorization());
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(await count("strava_activities", 1)).toBe(0);
+  });
+
+  // Comportement actuel (point de revue) : si Strava accepte encore le token au moment de la
+  // confirmation, une désautorisation légitime envoyée avant la révocation est ignorée.
+  it("keeps tokens and activities when the token is still accepted, even for a genuine event", async () => {
+    mockStrava({ "/api/v3/athlete": () => Response.json({ id: OWNER }) });
+
+    const response = await deliver(deauthorization());
+
+    expect(response.status).toBe(200);
+    expect(await count("oauth_tokens", 1)).toBe(1);
+    expect(await count("strava_activities", 1)).toBe(2);
+  });
+
+  it("leaves the other user untouched", async () => {
+    revoked();
+
+    await deliver(deauthorization());
+
+    expect(await count("oauth_tokens", 2)).toBe(1);
+    expect(await count("strava_activities", 2)).toBe(1);
+  });
+});
