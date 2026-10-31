@@ -12,16 +12,15 @@ import { generateSignedCookie } from "hono/cookie";
 import { app } from "../index";
 import type { Bindings } from "../env";
 import { resetDatabase } from "../test-db";
-import { trainingPaces, type TrainingPaces } from "../../core/paces";
-import type { Goal } from "./rules";
+import { trainingPaces, vdot } from "../../core/paces";
+import { loadFitness } from "./fitness";
+import type { Goal, GoalResponse } from "./rules";
 
 const testEnv: Bindings = { ...env, SESSION_SECRET: "session-secret" };
 const goal: Goal = {
   distanceM: 10000,
   raceDate: "2027-04-11",
   targetTimeS: 2700,
-  referenceDistanceM: 5000,
-  referenceTimeS: 1380,
   availableDays: [2, 4, 6],
 };
 
@@ -59,8 +58,60 @@ async function getGoal(userId: number) {
     { headers: { Cookie: await sessionCookie(userId) } },
     testEnv,
   );
-  return response.json<{ goal: Goal | null; paces: TrainingPaces | null }>();
+  return response.json<GoalResponse>();
 }
+
+type Run = {
+  id: number;
+  startDate: string;
+  distanceM: number;
+  movingTimeS: number;
+};
+
+// 5 km en 23:00 il y a 10 jours : VDOT ≈ 42,6.
+const fiveK: Run = {
+  id: 501,
+  startDate: "2026-10-20T07:00:00.000Z",
+  distanceM: 5000,
+  movingTimeS: 1380,
+};
+
+async function importRun(userId: number, run: Run, sportType = "Run") {
+  await env.DB.prepare(
+    `INSERT INTO imported_activities (user_id, id, start_date, sport_type, distance_m, moving_time_s)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      userId,
+      run.id,
+      run.startDate,
+      sportType,
+      run.distanceM,
+      run.movingTimeS,
+    )
+    .run();
+}
+
+async function syncRun(userId: number, run: Run) {
+  const payload = {
+    id: run.id,
+    sport_type: "Run",
+    start_date: run.startDate,
+    distance: run.distanceM,
+    moving_time: run.movingTimeS,
+  };
+  await env.DB.prepare(
+    "INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (?, ?, ?, '2026-10-30T08:00:00.000Z')",
+  )
+    .bind(run.id, userId, JSON.stringify(payload))
+    .run();
+}
+
+const basisOf = ({ startDate, distanceM, movingTimeS }: Run) => ({
+  startDate,
+  distanceM,
+  movingTimeS,
+});
 
 // Objectif seul, pour comparer sans les allures.
 async function getGoalOnly(userId: number) {
@@ -268,21 +319,44 @@ describe("/api/goal", () => {
     });
   });
 
-  it("returns a goal saved before #13 with an empty reference", async () => {
+  it("returns a goal saved before #13, without its legacy reference", async () => {
     await env.DB.prepare(
-      "INSERT INTO goals (user_id, race_date, distance_m, available_days) VALUES (1, '2027-04-11', 10000, '[1,3]')",
+      "INSERT INTO goals (user_id, race_date, distance_m, available_days, reference_distance_m, reference_time_s) VALUES (1, '2027-04-11', 10000, '[1,3]', 5000, 1380)",
     ).run();
 
-    expect(await getGoalOnly(1)).toEqual({
+    expect(await getGoal(1)).toEqual({
       goal: {
         distanceM: 10000,
         raceDate: "2027-04-11",
         targetTimeS: null,
-        referenceDistanceM: null,
-        referenceTimeS: null,
         availableDays: [1, 3],
       },
+      paces: null,
+      basis: null,
     });
+  });
+
+  // #46 : les colonnes restent en base (ADR 0002) mais ne sont plus écrites.
+  it("neither writes nor clears the legacy reference columns", async () => {
+    await putGoal(
+      1,
+      JSON.stringify({
+        ...goal,
+        referenceDistanceM: 5000,
+        referenceTimeS: 1380,
+      }),
+    );
+    const fresh = await env.DB.prepare(
+      "SELECT reference_distance_m AS d, reference_time_s AS t FROM goals",
+    ).first();
+    await env.DB.prepare("UPDATE goals SET reference_distance_m = 5000").run();
+    await putGoal(1, JSON.stringify(goal));
+    const kept = await env.DB.prepare(
+      "SELECT reference_distance_m AS d FROM goals",
+    ).first();
+
+    expect(fresh).toEqual({ d: null, t: null });
+    expect(kept).toEqual({ d: 5000 });
   });
 
   it("completes a goal saved before #13 without duplicating it", async () => {
@@ -297,62 +371,195 @@ describe("/api/goal", () => {
     expect(await getGoalOnly(1)).toEqual({ goal });
   });
 
-  // Référence 5 km en 23:00 (VDOT ≈ 42,6) → 10 km prédit en 47:42 ; visé 45:00 = 5,7 % plus rapide.
-  it("returns the paces computed from the reference with the goal", async () => {
+  // Course 5 km en 23:00 (VDOT ≈ 42,6) → 10 km prédit en 47:42 ; visé 45:00 = 5,7 % plus rapide.
+  it("returns the paces computed from the best recent run, with that run", async () => {
+    await importRun(1, fiveK);
     const saved = await putGoal(1, JSON.stringify(goal));
-    const { paces } = await getGoal(1);
+    const loaded = await getGoal(1);
 
-    expect(await saved.json()).toEqual({ goal, paces });
-    expect(paces).toMatchObject({
+    expect(await saved.json()).toEqual(loaded);
+    expect(loaded.basis).toEqual(basisOf(fiveK));
+    expect(loaded.paces).toMatchObject({
       threshold: { fastSPerKm: 292, slowSPerKm: 298 },
       race: { fastSPerKm: 267, slowSPerKm: 273 },
       predictedTimeS: 2862,
       targetWarning:
-        "Ton chrono visé est au moins 5 % plus rapide que ce que prédit ta référence. Un objectif réaliste serait autour de 47:42.",
+        "Ton chrono visé est au moins 5 % plus rapide que ce que prédit ton niveau actuel. Un objectif réaliste serait autour de 47:42.",
     });
   });
 
-  it("returns no paces without a goal or without a reference", async () => {
-    expect((await getGoal(1)).paces).toBeNull();
+  it("returns no paces without a usable run, even with a goal", async () => {
+    await putGoal(1, JSON.stringify(goal));
+    await importRun(1, { ...fiveK, id: 1, distanceM: 2000, movingTimeS: 600 });
+    await importRun(1, { ...fiveK, id: 2 }, "Ride");
+    await importRun(1, {
+      ...fiveK,
+      id: 3,
+      startDate: "2026-09-03T09:59:59.000Z",
+    });
 
-    await env.DB.prepare(
-      "INSERT INTO goals (user_id, race_date, distance_m) VALUES (1, '2027-04-11', 10000)",
-    ).run();
+    expect(await getGoal(1)).toEqual({ goal, paces: null, basis: null });
+  });
 
-    expect((await getGoal(1)).paces).toBeNull();
+  it("returns the basis but no paces without a goal", async () => {
+    await importRun(1, fiveK);
+
+    expect(await getGoal(1)).toEqual({
+      goal: null,
+      paces: null,
+      basis: basisOf(fiveK),
+    });
+  });
+
+  it("counts a run started exactly 8 weeks ago", async () => {
+    const edge = { ...fiveK, startDate: "2026-09-04T10:00:00.000Z" };
+    await importRun(1, edge);
+
+    expect((await getGoal(1)).basis).toEqual(basisOf(edge));
+  });
+
+  it("keeps the best run among easy runs from both sources", async () => {
+    const easy = {
+      id: 7,
+      startDate: "2026-10-29T07:00:00.000Z",
+      distanceM: 10000,
+      movingTimeS: 3600,
+    };
+    await putGoal(1, JSON.stringify(goal));
+    await syncRun(1, easy);
+    await importRun(1, fiveK);
+
+    expect((await getGoal(1)).paces).toEqual(
+      trainingPaces({ ...goal, vdot: vdot(5000, 1380) }),
+    );
+  });
+
+  // ADR 0004 : la version API l'emporte sur la version importée.
+  it("prefers the Strava API version of a run over its imported copy", async () => {
+    const corrected = { ...fiveK, movingTimeS: 1500 };
+    await importRun(1, fiveK);
+    await syncRun(1, corrected);
+
+    expect((await getGoal(1)).basis).toEqual(basisOf(corrected));
   });
 
   it("returns each user's own paces only", async () => {
     const marathon = { ...goal, distanceM: 42195, targetTimeS: null };
+    await importRun(1, fiveK);
     await putGoal(1, JSON.stringify(goal));
+    await putGoal(2, JSON.stringify(marathon));
 
     expect((await getGoal(2)).paces).toBeNull();
 
-    await putGoal(2, JSON.stringify(marathon));
+    await syncRun(2, { ...fiveK, id: 900, movingTimeS: 1200 });
 
-    expect((await getGoal(1)).paces).toEqual(trainingPaces(goal));
-    expect((await getGoal(2)).paces).toEqual(trainingPaces(marathon));
+    expect((await getGoal(1)).paces).toEqual(
+      trainingPaces({ ...goal, vdot: vdot(5000, 1380) }),
+    );
+    expect((await getGoal(2)).paces).toEqual(
+      trainingPaces({ ...marathon, vdot: vdot(5000, 1200) }),
+    );
   });
+});
 
-  it("recomputes the paces after the reference is replaced", async () => {
-    const faster = { ...goal, referenceTimeS: 1200 };
-    await putGoal(1, JSON.stringify(goal));
-    await putGoal(1, JSON.stringify(faster));
-
-    expect((await getGoal(1)).paces).toEqual(trainingPaces(faster));
-  });
-
-  // ADR 0003 : aucune donnée Strava n'entre dans le calcul des allures.
-  it("ignores the user's Strava activities when computing paces", async () => {
-    await putGoal(1, JSON.stringify(goal));
-    const before = (await getGoal(1)).paces;
+describe("/api/goal : sources du niveau (QA #46)", () => {
+  async function syncPayload(userId: number, id: number, payload: unknown) {
     await env.DB.prepare(
-      "INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (1, 1, ?, '2026-10-30T08:00:00.000Z')",
+      "INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (?, ?, ?, '2026-10-30T08:00:00.000Z')",
     )
-      .bind(JSON.stringify({ type: "Run", distance: 10000, moving_time: 2400 }))
+      .bind(id, userId, JSON.stringify(payload))
       .run();
+  }
 
-    expect((await getGoal(1)).paces).toEqual(before);
-    expect(before).toEqual(trainingPaces(goal));
+  // Toutes les tables applicatives, pour vérifier qu'aucune lecture n'écrit le niveau.
+  async function snapshot() {
+    const { results } = await env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name",
+    ).all<{ name: string }>();
+    const tables: Record<string, unknown[]> = {};
+    for (const { name } of results) {
+      tables[name] = (
+        await env.DB.prepare(`SELECT * FROM "${name}"`).all()
+      ).results;
+    }
+    return tables;
+  }
+
+  it("ignores a synced run started more than 8 weeks ago", async () => {
+    await syncRun(1, { ...fiveK, startDate: "2026-09-04T09:59:59.000Z" });
+
+    expect((await getGoal(1)).basis).toBeNull();
+  });
+
+  it("ignores an imported run dated in the future", async () => {
+    await importRun(1, { ...fiveK, startDate: "2026-10-30T10:00:01.000Z" });
+
+    expect((await getGoal(1)).basis).toBeNull();
+  });
+
+  it("counts a synced run whose payload only has the legacy type", async () => {
+    await syncPayload(1, 77, {
+      id: 77,
+      type: "Run",
+      start_date: fiveK.startDate,
+      distance: fiveK.distanceM,
+      moving_time: fiveK.movingTimeS,
+    });
+
+    expect((await getGoal(1)).basis).toEqual(basisOf(fiveK));
+  });
+
+  it("falls back on the imported copy when the synced payload is incomplete", async () => {
+    await importRun(1, fiveK);
+    await syncPayload(1, fiveK.id, { id: fiveK.id, sport_type: "Run" });
+
+    expect((await getGoal(1)).basis).toEqual(basisOf(fiveK));
+  });
+
+  it("falls back on the imported copy when the synced start date is unreadable", async () => {
+    await importRun(1, fiveK);
+    await syncPayload(1, fiveK.id, {
+      id: fiveK.id,
+      sport_type: "Run",
+      start_date: "pas une date",
+      distance: fiveK.distanceM,
+      moving_time: fiveK.movingTimeS,
+    });
+
+    expect((await getGoal(1)).basis).toEqual(basisOf(fiveK));
+  });
+
+  it("ignores a synced run with a zero moving time", async () => {
+    await syncRun(1, { ...fiveK, movingTimeS: 0 });
+
+    expect((await getGoal(1)).basis).toBeNull();
+  });
+
+  it("loads only the given user's runs from both sources", async () => {
+    await importRun(1, fiveK);
+    await importRun(2, { ...fiveK, id: 601, movingTimeS: 1100 });
+    await syncRun(2, { ...fiveK, id: 602, movingTimeS: 1150 });
+
+    const fitness = await loadFitness(env.DB, 1, Date.now());
+
+    expect(fitness?.run.id).toBe(fiveK.id);
+    expect(await loadFitness(env.DB, 3, Date.now())).toBeNull();
+  });
+
+  // ADR 0003 : le niveau est calculé à la volée ; GET n'écrit rien, PUT n'écrit que l'objectif.
+  it("stores neither the level nor the paces", async () => {
+    await importRun(1, fiveK);
+    await syncRun(1, { ...fiveK, id: 700, movingTimeS: 1500 });
+    await putGoal(1, JSON.stringify(goal));
+    const before = await snapshot();
+
+    await getGoal(1);
+    await putGoal(1, JSON.stringify(goal));
+    const after = await snapshot();
+
+    expect({ ...after, goals: [] }).toEqual({ ...before, goals: [] });
+    expect(after.goals).toHaveLength(1);
+    const stored = JSON.stringify(after.goals);
+    expect(stored).not.toMatch(/vdot|pace/i);
   });
 });

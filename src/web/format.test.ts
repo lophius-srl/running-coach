@@ -5,6 +5,7 @@ import {
   formatDuration,
   formatHeartrate,
   formatPace,
+  formatPaceBasis,
   formatPaceRange,
   formatRunName,
   formatSpeedRange,
@@ -155,4 +156,28 @@ describe("formatDuration and parseDuration", () => {
       expect(parseDuration(formatDuration(seconds))).toBe(seconds);
     },
   );
+});
+
+describe("formatPaceBasis", () => {
+  it("names the day, distance and moving time of the run", () => {
+    const basis = {
+      startDate: "2026-10-12T07:30:00.000Z",
+      distanceM: 10000,
+      movingTimeS: 2910,
+    };
+    expect(formatPaceBasis(basis, "UTC")).toBe(
+      "d'après ta sortie du 12 oct. : 10,00 km en 48:30",
+    );
+  });
+
+  it("shows hours for a long run, in the requested time zone", () => {
+    const basis = {
+      startDate: "2026-10-11T23:30:00.000Z",
+      distanceM: 21098,
+      movingTimeS: 6330,
+    };
+    expect(formatPaceBasis(basis, "Europe/Paris")).toBe(
+      "d'après ta sortie du 12 oct. : 21,10 km en 1:45:30",
+    );
+  });
 });

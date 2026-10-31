@@ -4,11 +4,12 @@ import {
   RACE_DISTANCES,
   validateGoal,
   WEEK_DAYS,
+  type Goal,
   type GoalErrors,
   type GoalField,
-  type SavedGoal,
+  type GoalResponse,
 } from "../worker/goals/rules";
-import type { TrainingPaces } from "../core/paces";
+import { MAX_DISTANCE_M, MIN_DISTANCE_M } from "../core/fitness";
 import { formatDuration, localIsoDate } from "./format";
 import { Paces } from "./Paces";
 
@@ -18,8 +19,6 @@ type Form = {
   distanceM: string;
   raceDate: string;
   targetTime: string;
-  referenceDistanceM: string;
-  referenceTime: string;
   availableDays: number[];
 };
 
@@ -27,8 +26,6 @@ const EMPTY_FORM: Form = {
   distanceM: "",
   raceDate: "",
   targetTime: "",
-  referenceDistanceM: "",
-  referenceTime: "",
   availableDays: [],
 };
 
@@ -43,20 +40,15 @@ const FIELD_IDS: Record<GoalField, string> = {
   distanceM: "goal-distance",
   raceDate: "goal-date",
   targetTimeS: "goal-target",
-  referenceDistanceM: "goal-ref-distance",
-  referenceTimeS: "goal-ref-time",
   availableDays: "goal-day-1",
 };
 
-function toForm(goal: SavedGoal): Form {
+function toForm(goal: Goal): Form {
   return {
     distanceM: String(goal.distanceM),
     raceDate: goal.raceDate,
     targetTime:
       goal.targetTimeS === null ? "" : formatDuration(goal.targetTimeS),
-    referenceDistanceM: goal.referenceDistanceM?.toString() ?? "",
-    referenceTime:
-      goal.referenceTimeS === null ? "" : formatDuration(goal.referenceTimeS),
     availableDays: goal.availableDays,
   };
 }
@@ -69,8 +61,6 @@ function toInput(form: Form): Record<GoalField, unknown> {
     raceDate: form.raceDate,
     targetTimeS:
       form.targetTime.trim() === "" ? null : duration(form.targetTime),
-    referenceDistanceM: Number(form.referenceDistanceM),
-    referenceTimeS: duration(form.referenceTime),
     availableDays: form.availableDays,
   };
 }
@@ -136,8 +126,8 @@ function DistanceOptions() {
   );
 }
 
-type GoalResponse = { goal: SavedGoal | null; paces: TrainingPaces | null };
-type SaveResult = { errors: GoalErrors } | { paces: TrainingPaces | null };
+type PacesState = Omit<GoalResponse, "goal">;
+type SaveResult = { errors: GoalErrors } | PacesState;
 
 async function fetchGoal(): Promise<GoalResponse> {
   const response = await fetch("/api/goal");
@@ -157,22 +147,41 @@ async function saveGoal(
     return (await response.json()) as { errors: GoalErrors };
   }
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return { paces: ((await response.json()) as GoalResponse).paces };
+  const { paces, basis } = (await response.json()) as GoalResponse;
+  return { paces, basis };
+}
+
+// Allures, ou la raison de leur absence : pas de course exploitable, ou pas encore d'objectif.
+function PacesOrReason({ paces, basis }: PacesState) {
+  if (paces && basis) return <Paces paces={paces} basis={basis} />;
+  return (
+    <p className="muted paces-missing">
+      {basis
+        ? "Enregistre ton objectif pour voir tes allures."
+        : "Pas d'allures pour l'instant : aucune course exploitable sur les 8 dernières " +
+          `semaines (course à pied de ${MIN_DISTANCE_M / 1000} à ${MAX_DISTANCE_M / 1000} km, ` +
+          "à une allure réaliste). Synchronise " +
+          "tes activités Strava ou importe ton historique ci-dessous."}
+    </p>
+  );
 }
 
 export function GoalForm() {
   const [form, setForm] = useState<Form>(EMPTY_FORM);
   const [errors, setErrors] = useState<GoalErrors>({});
   const [status, setStatus] = useState<Status>("loading");
-  const [paces, setPaces] = useState<TrainingPaces | null>(null);
+  const [fitness, setFitness] = useState<PacesState>({
+    paces: null,
+    basis: null,
+  });
   const [loadAttempt, setLoadAttempt] = useState(0);
 
   // Sans objectif chargé, pas de formulaire : un enregistrement écraserait l'objectif existant.
   useEffect(() => {
     fetchGoal()
-      .then(({ goal, paces }) => {
+      .then(({ goal, paces, basis }) => {
         if (goal) setForm(toForm(goal));
-        setPaces(paces);
+        setFitness({ paces, basis });
         setStatus("ready");
       })
       .catch(() => setStatus("loadFailed"));
@@ -217,7 +226,7 @@ export function GoalForm() {
         setStatus("ready");
       } else {
         showErrors({});
-        setPaces(result.paces);
+        setFitness(result);
         setStatus("saved");
       }
     } catch {
@@ -299,38 +308,6 @@ export function GoalForm() {
               />
             )}
           </Field>
-          <Field
-            field="referenceDistanceM"
-            label="Distance de ton chrono de référence récent"
-            errors={errors}
-          >
-            {(aria) => (
-              <select
-                {...aria}
-                className="input"
-                value={form.referenceDistanceM}
-                onChange={(e) => update({ referenceDistanceM: e.target.value })}
-              >
-                <DistanceOptions />
-              </select>
-            )}
-          </Field>
-          <Field
-            field="referenceTimeS"
-            label="Chrono de référence"
-            hint={TIME_HINT}
-            errors={errors}
-          >
-            {(aria) => (
-              <input
-                {...aria}
-                className="input"
-                autoComplete="off"
-                value={form.referenceTime}
-                onChange={(e) => update({ referenceTime: e.target.value })}
-              />
-            )}
-          </Field>
           <fieldset
             className="field"
             aria-describedby={describedBy(
@@ -382,13 +359,7 @@ export function GoalForm() {
           </p>
         )}
       </form>
-      {paces ? (
-        <Paces paces={paces} />
-      ) : (
-        <p className="muted paces-missing">
-          Renseigne un chrono de référence pour voir tes allures.
-        </p>
-      )}
+      <PacesOrReason {...fitness} />
     </section>
   );
 }

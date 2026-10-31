@@ -1,5 +1,11 @@
+import type { PaceBasis } from "../core/fitness";
 import type { TrainingPaces } from "../core/paces";
-import { formatDuration, formatPaceRange, formatSpeedRange } from "./format";
+import {
+  formatDuration,
+  formatPaceBasis,
+  formatPaceRange,
+  formatSpeedRange,
+} from "./format";
 
 const HEADING_ID = "paces-title";
 
@@ -12,15 +18,21 @@ const ZONES: { key: ZoneKey; label: string; hint: string }[] = [
   { key: "race", label: "Allure course", hint: "allure de ton objectif" },
 ];
 
-// Sous-section de « Mon objectif » : allures calculées depuis le chrono de référence
-// (méthode VDOT de Jack Daniels, voir src/core/paces.ts).
-export function Paces({ paces }: { paces: TrainingPaces }) {
+type Props = { paces: TrainingPaces; basis: PaceBasis };
+
+// Sous-section de « Mon objectif » : allures calculées depuis la meilleure course des 8 dernières
+// semaines (méthode VDOT de Jack Daniels, voir src/core/fitness.ts et src/core/paces.ts).
+export function Paces({ paces, basis }: Props) {
   return (
     <section className="paces-section" aria-labelledby={HEADING_ID}>
       <h3 id={HEADING_ID} className="section-title">
         Mes allures
       </h3>
       <div className="card paces">
+        <p className="muted">
+          Calculées {formatPaceBasis(basis)}, ta meilleure performance des 8
+          dernières semaines.
+        </p>
         <dl className="pace-list">
           {ZONES.map(({ key, label, hint }) => {
             const zone = paces[key];
@@ -40,7 +52,7 @@ export function Paces({ paces }: { paces: TrainingPaces }) {
           })}
         </dl>
         <p className="muted">
-          Chrono prédit par ta référence sur la distance de ton objectif :{" "}
+          Chrono prédit par ton niveau actuel sur la distance de ton objectif :{" "}
           {formatDuration(paces.predictedTimeS)}.
         </p>
         {paces.targetWarning && (

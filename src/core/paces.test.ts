@@ -13,8 +13,7 @@ function sameDistance(distanceM: number, timeS: number): PaceInput {
   return {
     distanceM,
     targetTimeS: null,
-    referenceDistanceM: distanceM,
-    referenceTimeS: timeS,
+    vdot: vdot(distanceM, timeS),
   };
 }
 
@@ -95,8 +94,7 @@ describe("trainingPaces : propriétés", () => {
     const paces = trainingPaces({
       distanceM: 42195,
       targetTimeS: null,
-      referenceDistanceM: 10000,
-      referenceTimeS: 3000,
+      vdot: vdot(10000, 3000),
     });
     expect(paces.predictedTimeS).toBe(13774);
     expect(paces.race).toEqual(range(323, 330)); // 5:26 ± 1 %
@@ -136,10 +134,10 @@ describe("trainingPaces : chrono visé irréaliste", () => {
 
   it("avertit au-delà de 5 %", () => {
     expect(atGap(0.0503)).toBe(
-      "Ton chrono visé est au moins 5 % plus rapide que ce que prédit ta référence. Un objectif réaliste serait autour de 50:00.",
+      "Ton chrono visé est au moins 5 % plus rapide que ce que prédit ton niveau actuel. Un objectif réaliste serait autour de 50:00.",
     ); // 2849 s, écart 5,03 %
     expect(atGap(0.08)).toBe(
-      "Ton chrono visé est au moins 8 % plus rapide que ce que prédit ta référence. Un objectif réaliste serait autour de 50:00.",
+      "Ton chrono visé est au moins 8 % plus rapide que ce que prédit ton niveau actuel. Un objectif réaliste serait autour de 50:00.",
     );
   });
 
@@ -174,8 +172,7 @@ describe("trainingPaces : déterminisme et domaine de saisie", () => {
     const input: PaceInput = {
       distanceM: 42195,
       targetTimeS: 13500,
-      referenceDistanceM: 10000,
-      referenceTimeS: 3000,
+      vdot: vdot(10000, 3000),
     };
     const frozen = Object.freeze({ ...input });
 
@@ -190,8 +187,7 @@ describe("trainingPaces : déterminisme et domaine de saisie", () => {
         trainingPaces({
           distanceM: 21098,
           targetTimeS: null,
-          referenceDistanceM,
-          referenceTimeS,
+          vdot: vdot(referenceDistanceM, referenceTimeS),
         }),
       );
       for (let i = 1; i < results.length; i++) {
@@ -251,8 +247,7 @@ describe("trainingPaces : déterminisme et domaine de saisie", () => {
       const paces = trainingPaces({
         distanceM,
         targetTimeS: null,
-        referenceDistanceM,
-        referenceTimeS,
+        vdot: score,
       });
       for (const pace of allPaces(paces)) {
         expect(Number.isSafeInteger(pace) && pace > 0).toBe(true);
@@ -288,8 +283,7 @@ describe("trainingPaces : avertissement entre distances différentes", () => {
     trainingPaces({
       distanceM: 42195,
       targetTimeS,
-      referenceDistanceM: 10000,
-      referenceTimeS: 3000,
+      vdot: vdot(10000, 3000),
     }).targetWarning;
 
   it("n'avertit pas juste en deçà de 5 % (13 086 s, écart 4,998 %)", () => {
@@ -298,7 +292,7 @@ describe("trainingPaces : avertissement entre distances différentes", () => {
 
   it("avertit juste au-delà de 5 % (13 085 s, écart 5,002 %)", () => {
     expect(marathonTarget(13085)).toBe(
-      "Ton chrono visé est au moins 5 % plus rapide que ce que prédit ta référence. Un objectif réaliste serait autour de 3:49:34.",
+      "Ton chrono visé est au moins 5 % plus rapide que ce que prédit ton niveau actuel. Un objectif réaliste serait autour de 3:49:34.",
     );
   });
 
@@ -311,12 +305,11 @@ describe("trainingPaces : avertissement entre distances différentes", () => {
     const paces = trainingPaces({
       distanceM: 42195,
       targetTimeS: 10800, // 3:00:00, écart 21,6 %
-      referenceDistanceM: 10000,
-      referenceTimeS: 3000,
+      vdot: vdot(10000, 3000),
     });
     expect(paces.race).toEqual(range(253, 259)); // 4:16/km ± 1 %
     expect(paces.targetWarning).toBe(
-      "Ton chrono visé est au moins 21 % plus rapide que ce que prédit ta référence. Un objectif réaliste serait autour de 3:49:34.",
+      "Ton chrono visé est au moins 21 % plus rapide que ce que prédit ton niveau actuel. Un objectif réaliste serait autour de 3:49:34.",
     );
   });
 });
