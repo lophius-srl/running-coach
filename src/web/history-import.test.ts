@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ACTIVITIES_SAMPLE_CSV } from "../core/fixtures/activities-sample";
 import {
   IMPORT_BATCH_SIZE,
@@ -11,6 +11,7 @@ import {
   ImportRequestError,
   MAX_FILE_BYTES,
   payloadBatches,
+  postBatch,
   previewOf,
   readErrorMessage,
   sendBatches,
@@ -42,19 +43,31 @@ function makeRuns(count: number): ImportedRun[] {
   }));
 }
 
-// Faux serveur : dédoublonne par id comme imported_activities, et peut échouer à un appel donné.
-function fakeServer(failOnCall?: number) {
+const HEADER = "Activity ID,Activity Date,Activity Type,Distance,Moving Time";
+
+function readCsv(text: string): HistoryFile {
+  const result = readActivitiesCsv(text, NOW_MS);
+  if (!result.ok) throw new Error(result.reason);
+  return result.file;
+}
+
+// Faux serveur : dédoublonne par id comme imported_activities, et peut échouer à des appels donnés.
+function fakeServer(...failOnCalls: number[]) {
   const stored = new Set<number>();
   let calls = 0;
   const send: SendBatch = async (rows) => {
     calls++;
-    if (calls === failOnCall) throw new Error("network");
+    if (failOnCalls.includes(calls)) throw new Error("network");
     const alreadyPresent = rows.filter((row) => stored.has(row.id)).length;
     rows.forEach((row) => stored.add(row.id));
     return { inserted: rows.length - alreadyPresent, alreadyPresent };
   };
-  return { send, stored };
+  return { send, stored, calls: () => calls };
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("fileProblem", () => {
   it("refuses the .zip archive and asks to extract activities.csv", () => {
@@ -241,5 +254,248 @@ describe("sendErrorMessage", () => {
       "Relance",
     );
     expect(sendErrorMessage(new ImportRequestError(500))).toContain("Relance");
+  });
+});
+
+describe("edge cases of the file", () => {
+  it("lets an empty file reach the CSV check instead of refusing it early", () => {
+    expect(fileProblem({ name: "activities.csv", size: 0 })).toBeNull();
+  });
+
+  it("explains an empty file by listing every required column", () => {
+    const result = readActivitiesCsv("", NOW_MS);
+    if (result.ok) throw new Error("should be refused");
+    const message = readErrorMessage(result);
+    for (const column of [
+      "Activity ID",
+      "Activity Date",
+      "Activity Type",
+      "Distance",
+      "Moving Time",
+    ]) {
+      expect(message).toContain(column);
+    }
+  });
+
+  it("shows no run and no period for a file with headers only", () => {
+    expect(previewOf(readCsv(`${HEADER}\n`))).toEqual({
+      runs: 0,
+      firstDate: null,
+      lastDate: null,
+      ignored: 0,
+      otherSports: 0,
+      invalid: 0,
+      duplicates: 0,
+    });
+    expect(payloadBatches(readCsv(HEADER).runs)).toEqual([]);
+  });
+
+  it("counts a file without any run as other sports only", () => {
+    const ride = '1,"Mar 14, 2021, 7:02:11 AM",Ride,40.0,5000';
+    const swim = '2,"Mar 15, 2021, 7:02:11 AM",Swim,2.0,3000';
+    expect(previewOf(readCsv(`${HEADER}\n${ride}\n${swim}`))).toMatchObject({
+      runs: 0,
+      firstDate: null,
+      ignored: 2,
+      otherSports: 2,
+    });
+  });
+
+  it("gives the same first and last date for a single run", () => {
+    const line = '1,"Mar 14, 2021, 7:02:11 AM",Run,10.0,3000';
+    expect(previewOf(readCsv(`${HEADER}\n${line}`))).toMatchObject({
+      runs: 1,
+      firstDate: "2021-03-14T07:02:11.000Z",
+      lastDate: "2021-03-14T07:02:11.000Z",
+    });
+  });
+});
+
+describe("batch boundaries", () => {
+  it("sends exactly 200 runs in a single batch", () => {
+    expect(payloadBatches(makeRuns(200)).map((b) => b.length)).toEqual([200]);
+  });
+
+  it("sends 201 runs in a full batch and a batch of one", () => {
+    expect(payloadBatches(makeRuns(201)).map((b) => b.length)).toEqual([
+      200, 1,
+    ]);
+  });
+});
+
+describe("sendBatches edge cases", () => {
+  it("makes a single call for exactly 200 runs", async () => {
+    const batches = payloadBatches(makeRuns(200));
+    const server = fakeServer();
+    const outcome = await sendBatches(
+      batches,
+      startProgress(batches.length),
+      server.send,
+      () => {},
+    );
+    expect(server.calls()).toBe(1);
+    expect(outcome.progress).toMatchObject({ nextBatch: 1, inserted: 200 });
+  });
+
+  it("keeps the 401 error and the progress reached in the middle of the import", async () => {
+    const batches = payloadBatches(makeRuns(450));
+    let calls = 0;
+    const send: SendBatch = async (rows) => {
+      calls++;
+      if (calls === 2) throw new ImportRequestError(401);
+      return { inserted: rows.length, alreadyPresent: 0 };
+    };
+    const outcome = await sendBatches(
+      batches,
+      startProgress(3),
+      send,
+      () => {},
+    );
+    if (outcome.ok) throw new Error("should fail");
+    expect(sendErrorMessage(outcome.error)).toContain("reconnecte");
+    expect(outcome.progress).toMatchObject({ nextBatch: 1, inserted: 200 });
+  });
+
+  it("does not report progress for the failed last batch, then finishes it on resume", async () => {
+    const batches = payloadBatches(makeRuns(450));
+    const server = fakeServer(3);
+    const seen: number[] = [];
+    const failed = await sendBatches(
+      batches,
+      startProgress(3),
+      server.send,
+      (p) => seen.push(p.nextBatch),
+    );
+    expect(failed.ok).toBe(false);
+    expect(seen).toEqual([1, 2]);
+    expect(failed.progress).toMatchObject({ nextBatch: 2, inserted: 400 });
+
+    const resumed = await sendBatches(
+      batches,
+      failed.progress,
+      server.send,
+      () => {},
+    );
+    expect(resumed.progress).toMatchObject({
+      nextBatch: 3,
+      inserted: 450,
+      alreadyPresent: 0,
+    });
+    expect(server.stored.size).toBe(450);
+  });
+
+  it("finishes after several interruptions with exact totals and no duplicates", async () => {
+    const batches = payloadBatches(makeRuns(1000));
+    const server = fakeServer(2, 3, 5);
+    let outcome = await sendBatches(
+      batches,
+      startProgress(batches.length),
+      server.send,
+      () => {},
+    );
+    let attempts = 1;
+    while (!outcome.ok) {
+      outcome = await sendBatches(
+        batches,
+        outcome.progress,
+        server.send,
+        () => {},
+      );
+      attempts++;
+    }
+    expect(attempts).toBe(4);
+    expect(outcome.progress).toMatchObject({
+      nextBatch: 5,
+      inserted: 1000,
+      alreadyPresent: 0,
+    });
+    expect(server.stored.size).toBe(1000);
+  });
+
+  it("counts as already present a batch stored by the server whose answer was lost", async () => {
+    const batches = payloadBatches(makeRuns(450));
+    const server = fakeServer();
+    let lostAnswer = true;
+    const send: SendBatch = async (rows) => {
+      const result = await server.send(rows);
+      if (server.calls() === 2 && lostAnswer) {
+        lostAnswer = false;
+        throw new TypeError("connection reset");
+      }
+      return result;
+    };
+    const failed = await sendBatches(batches, startProgress(3), send, () => {});
+    const resumed = await sendBatches(batches, failed.progress, send, () => {});
+    expect(resumed.progress).toMatchObject({
+      inserted: 250,
+      alreadyPresent: 200,
+    });
+    expect(server.stored.size).toBe(450);
+  });
+
+  it("restarting from the first batch after a reload creates no duplicate", async () => {
+    const batches = payloadBatches(makeRuns(450));
+    const server = fakeServer(2);
+    await sendBatches(batches, startProgress(3), server.send, () => {});
+    const restarted = await sendBatches(
+      batches,
+      startProgress(3),
+      server.send,
+      () => {},
+    );
+    expect(restarted.progress).toMatchObject({
+      inserted: 250,
+      alreadyPresent: 200,
+    });
+    expect(server.stored.size).toBe(450);
+  });
+
+  it("sends nothing when resuming an import already finished", async () => {
+    const batches = payloadBatches(makeRuns(450));
+    const server = fakeServer();
+    const done = await sendBatches(
+      batches,
+      startProgress(3),
+      server.send,
+      () => {},
+    );
+    const again = await sendBatches(
+      batches,
+      done.progress,
+      server.send,
+      () => {},
+    );
+    expect(server.calls()).toBe(3);
+    expect(again).toEqual(done);
+  });
+});
+
+describe("postBatch", () => {
+  function stubFetch(response: Response) {
+    return vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
+  }
+
+  it("posts the rows as JSON to the import endpoint", async () => {
+    const fetchSpy = stubFetch(
+      Response.json({ inserted: 1, alreadyPresent: 0 }),
+    );
+    const rows = makeRuns(1);
+    expect(await postBatch(rows)).toEqual({ inserted: 1, alreadyPresent: 0 });
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(url).toBe("/api/history/import");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual({ rows });
+  });
+
+  it("throws the HTTP status when the session has expired", async () => {
+    stubFetch(Response.json({ error: "unauthorized" }, { status: 401 }));
+    await expect(postBatch(makeRuns(1))).rejects.toMatchObject({
+      status: 401,
+    });
+  });
+
+  it("lets a network failure through so that the import can be resumed", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("offline"));
+    await expect(postBatch(makeRuns(1))).rejects.toBeInstanceOf(TypeError);
   });
 });
