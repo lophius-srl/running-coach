@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import {
   parseDuration,
   RACE_DISTANCES,
@@ -9,9 +9,7 @@ import {
   type GoalField,
   type GoalResponse,
 } from "../worker/goals/rules";
-import { MAX_DISTANCE_M, MIN_DISTANCE_M } from "../core/fitness";
 import { formatDuration, localIsoDate } from "./format";
-import { Paces } from "./Paces";
 
 const HEADING_ID = "goal-title";
 
@@ -29,8 +27,7 @@ const EMPTY_FORM: Form = {
   availableDays: [],
 };
 
-type Status =
-  "loading" | "loadFailed" | "ready" | "saving" | "saved" | "saveFailed";
+type Status = "ready" | "saving" | "saved" | "saveFailed";
 
 const TIME_HINT =
   "Format h:mm:ss ou mm:ss, ex. 3:45:00 pour 3 h 45, 45:30 pour 45 min 30.";
@@ -126,14 +123,7 @@ function DistanceOptions() {
   );
 }
 
-type PacesState = Omit<GoalResponse, "goal">;
-type SaveResult = { errors: GoalErrors } | PacesState;
-
-async function fetchGoal(): Promise<GoalResponse> {
-  const response = await fetch("/api/goal");
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return (await response.json()) as GoalResponse;
-}
+type SaveResult = { errors: GoalErrors } | GoalResponse;
 
 async function saveGoal(
   input: Record<GoalField, unknown>,
@@ -147,50 +137,22 @@ async function saveGoal(
     return (await response.json()) as { errors: GoalErrors };
   }
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const { paces, basis } = (await response.json()) as GoalResponse;
-  return { paces, basis };
+  return (await response.json()) as GoalResponse;
 }
 
-// Allures, ou la raison de leur absence : pas de course exploitable, ou pas encore d'objectif.
-function PacesOrReason({ paces, basis }: PacesState) {
-  if (paces && basis) return <Paces paces={paces} basis={basis} />;
-  return (
-    <p className="muted paces-missing">
-      {basis
-        ? "Enregistre ton objectif pour voir tes allures."
-        : "Pas d'allures pour l'instant : aucune course exploitable sur les 8 dernières " +
-          `semaines (course à pied de ${MIN_DISTANCE_M / 1000} à ${MAX_DISTANCE_M / 1000} km, ` +
-          "à une allure réaliste). Synchronise " +
-          "tes activités Strava ou importe ton historique ci-dessous."}
-    </p>
+type Props = {
+  goal: Goal | null;
+  onSaved: (response: GoalResponse) => void; // objectif et allures recalculées
+};
+
+// Formulaire affiché seulement une fois l'objectif chargé (voir GoalView) : sinon, un
+// enregistrement écraserait l'objectif existant.
+export function GoalForm({ goal, onSaved }: Props) {
+  const [form, setForm] = useState<Form>(() =>
+    goal ? toForm(goal) : EMPTY_FORM,
   );
-}
-
-export function GoalForm() {
-  const [form, setForm] = useState<Form>(EMPTY_FORM);
   const [errors, setErrors] = useState<GoalErrors>({});
-  const [status, setStatus] = useState<Status>("loading");
-  const [fitness, setFitness] = useState<PacesState>({
-    paces: null,
-    basis: null,
-  });
-  const [loadAttempt, setLoadAttempt] = useState(0);
-
-  // Sans objectif chargé, pas de formulaire : un enregistrement écraserait l'objectif existant.
-  useEffect(() => {
-    fetchGoal()
-      .then(({ goal, paces, basis }) => {
-        if (goal) setForm(toForm(goal));
-        setFitness({ paces, basis });
-        setStatus("ready");
-      })
-      .catch(() => setStatus("loadFailed"));
-  }, [loadAttempt]);
-
-  function retryLoad() {
-    setStatus("loading");
-    setLoadAttempt((attempt) => attempt + 1);
-  }
+  const [status, setStatus] = useState<Status>("ready");
 
   function update(changes: Partial<Form> | ((current: Form) => Partial<Form>)) {
     setForm((current) => ({
@@ -226,7 +188,7 @@ export function GoalForm() {
         setStatus("ready");
       } else {
         showErrors({});
-        setFitness(result);
+        onSaved(result);
         setStatus("saved");
       }
     } catch {
@@ -234,39 +196,14 @@ export function GoalForm() {
     }
   }
 
-  if (status === "loading") return null;
-
-  const heading = (
-    <h2 id={HEADING_ID} className="section-title">
-      Mon objectif
-    </h2>
-  );
-
-  if (status === "loadFailed") {
-    return (
-      <section aria-labelledby={HEADING_ID}>
-        {heading}
-        <div className="card state">
-          <p className="alert" role="alert">
-            <span className="alert-label">Erreur :</span> Impossible de charger
-            ton objectif.
-          </p>
-          <p>
-            <button type="button" className="button" onClick={retryLoad}>
-              Réessayer
-            </button>
-          </p>
-        </div>
-      </section>
-    );
-  }
-
   const saving = status === "saving";
   const daysInvalid = Boolean(errors.availableDays);
 
   return (
     <section aria-labelledby={HEADING_ID}>
-      {heading}
+      <h2 id={HEADING_ID} className="section-title">
+        Mon objectif
+      </h2>
       <form className="card goal-form" onSubmit={submit} noValidate>
         <fieldset className="form-fields" disabled={saving}>
           <Field field="distanceM" label="Distance cible" errors={errors}>
@@ -359,7 +296,6 @@ export function GoalForm() {
           </p>
         )}
       </form>
-      <PacesOrReason {...fitness} />
     </section>
   );
 }
