@@ -11,6 +11,7 @@ describe("formatPlanDay", () => {
 describe("planErrorMessage", () => {
   it("explains each refusal", () => {
     expect(planErrorMessage("no_goal")).toMatch(/objectif/);
+    expect(planErrorMessage("no_days")).toMatch(/jours disponibles/);
     expect(planErrorMessage("no_paces")).toMatch(/allures/);
     expect(planErrorMessage("race_passed")).toMatch(/passée/);
   });

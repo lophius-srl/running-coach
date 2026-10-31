@@ -101,6 +101,7 @@ planRoutes.post("/", async (c) => {
   );
   const refuse = (error: PlanError) => c.json({ error }, 409);
   if (goalId === null || goal === null) return refuse("no_goal");
+  if (goal.availableDays.length === 0) return refuse("no_days");
   if (paces === null) return refuse("no_paces");
   const plan = generateWeekPlan({
     ...goal,

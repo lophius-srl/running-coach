@@ -20,6 +20,7 @@ export const PHASE_LABELS: Record<PlanPhase, string> = {
 
 const ERROR_MESSAGES: Record<PlanError, string> = {
   no_goal: "Enregistre d'abord ton objectif.",
+  no_days: "Coche tes jours disponibles dans ton objectif.",
   no_paces: "Il faut d'abord tes allures : synchronise tes courses.",
   race_passed: "Ta course est passée : mets à jour ton objectif.",
 };

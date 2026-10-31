@@ -100,6 +100,16 @@ describe("/api/plan", () => {
     expect(await response.json()).toEqual({ error: "no_goal" });
   });
 
+  it("refuses to generate without available days", async () => {
+    await env.DB.prepare(
+      "INSERT INTO goals (user_id, race_date, distance_m) VALUES (1, '2027-04-11', 10000)",
+    ).run();
+    await importRun(1, 1, 1380);
+    const response = await callPlan(1, "POST");
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "no_days" });
+  });
+
   it("refuses to generate without paces", async () => {
     await saveGoal(1);
     const response = await callPlan(1, "POST");

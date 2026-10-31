@@ -17,8 +17,9 @@ export type PlanView = Omit<WeekPlan, "sessions"> & {
 
 export type PlanResponse = { plan: PlanView | null };
 
-// Refus de génération (409) : pas d'objectif, pas d'allures, ou course passée.
-export type PlanError = "no_goal" | "no_paces" | "race_passed";
+// Refus de génération (409) : pas d'objectif, aucun jour disponible, pas d'allures, ou course
+// passée.
+export type PlanError = "no_goal" | "no_days" | "no_paces" | "race_passed";
 
 // Allures cibles ajoutées à la lecture, depuis les allures du moment : elles dérivent des
 // activités Strava et ne sont donc jamais stockées avec le plan (ADR 0003).

@@ -57,6 +57,17 @@ function MissingInputs({ goal }: { goal: GoalState }) {
       </p>
     );
   }
+  if (goal.data.goal.availableDays.length === 0) {
+    return (
+      <p className="muted">
+        Coche tes jours disponibles dans ton{" "}
+        <RouteLink view="goal" className="text-link">
+          objectif
+        </RouteLink>{" "}
+        pour recevoir ton plan.
+      </p>
+    );
+  }
   if (goal.data.paces) return null;
   return (
     <p className="muted">
@@ -147,7 +158,9 @@ export function WeekPlan({ goal, syncCount }: Props) {
   }
 
   const ready =
-    goal.status === "loaded" && !!goal.data.goal && !!goal.data.paces;
+    goal.status === "loaded" &&
+    !!goal.data.goal?.availableDays.length &&
+    !!goal.data.paces;
   const plan = state.status === "loaded" ? state.plan : null;
 
   return (
