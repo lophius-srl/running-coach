@@ -103,7 +103,8 @@ export async function processWebhookAction(
       return deauthorizeUser(env, userId);
     case "refresh-activity": {
       const payload = await fetchActivity(env, userId, action.activityId);
-      return syncActivity(
+      // await plutôt que return : évite une « unhandled rejection » si syncActivity rejette d'emblée.
+      await syncActivity(
         env,
         userId,
         action.athleteId,
@@ -111,6 +112,7 @@ export async function processWebhookAction(
         payload,
         nowMs,
       );
+      return;
     }
     case "remove-activity": {
       // Encore visible chez Strava comme course à garder = faux événement : on n'y touche pas.
