@@ -16,7 +16,12 @@ import {
 } from "../../core/plan";
 import { loadRuns } from "../goals/fitness";
 import { toGoal, type GoalRow } from "../goals/routes";
-import { APP_TIME_ZONE, localIsoDate, type Goal } from "../goals/rules";
+import {
+  APP_TIME_ZONE,
+  localIsoDate,
+  zonedMidnightMs,
+  type Goal,
+} from "../goals/rules";
 import { withTargetPaces, type PlanError } from "./view";
 
 type PlanRow = {
@@ -81,8 +86,17 @@ async function loadGoalAndPaces(db: D1Database, userId: number, nowMs: number) {
   const paces: TrainingPaces | null =
     goal && fitness && trainingPaces({ ...goal, vdot: fitness.vdot });
   // Plan affiché : plan de base ajusté aux courses récentes, avec les allures du moment.
+  // Décision ancrée sur le début du plan (minuit à Paris de weekStart) : stable toute la semaine.
   const view = (plan: WeekPlan) =>
-    withTargetPaces(adjustPlan(plan, runs, nowMs), paces);
+    withTargetPaces(
+      adjustPlan(
+        plan,
+        runs,
+        zonedMidnightMs(plan.weekStart, APP_TIME_ZONE),
+        localIsoDate(nowMs, APP_TIME_ZONE),
+      ),
+      paces,
+    );
   return { goalId: row?.id ?? null, goal, paces, view };
 }
 

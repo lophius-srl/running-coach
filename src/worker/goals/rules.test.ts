@@ -4,6 +4,7 @@ import {
   localIsoDate,
   parseDuration,
   validateGoal,
+  zonedMidnightMs,
   type Goal,
 } from "./rules";
 
@@ -36,6 +37,25 @@ describe("parseDuration", () => {
       expect(parseDuration(text)).toBeNull();
     },
   );
+});
+
+describe("zonedMidnightMs", () => {
+  it.each([
+    ["2026-11-02", "2026-11-01T23:00:00.000Z"], // heure d'hiver (UTC+1)
+    ["2026-07-02", "2026-07-01T22:00:00.000Z"], // heure d'été (UTC+2)
+    ["2026-03-29", "2026-03-28T23:00:00.000Z"], // jour du passage à l'heure d'été
+    ["2026-10-25", "2026-10-24T22:00:00.000Z"], // jour du retour à l'heure d'hiver
+  ])("returns midnight in Paris on %s", (date, expected) => {
+    expect(new Date(zonedMidnightMs(date, APP_TIME_ZONE)).toISOString()).toBe(
+      expected,
+    );
+  });
+
+  it("returns UTC midnight in UTC", () => {
+    expect(zonedMidnightMs("2026-11-02", "UTC")).toBe(
+      Date.parse("2026-11-02T00:00:00Z"),
+    );
+  });
 });
 
 describe("localIsoDate", () => {

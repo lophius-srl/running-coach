@@ -500,5 +500,49 @@ describe("/api/plan", () => {
         /reprise|planned|adjust/i,
       );
     });
+
+    it("keeps the restart all week, after a run on day 2, and leaves past sessions", async () => {
+      await saveGoal(1);
+      await importRun(1, 1, 1380, "2026-10-20T07:00:00.000Z");
+      await callPlan(1, "POST");
+      await syncRun(1, 10, 40 * 60, "2026-11-03T07:00:00.000Z");
+      vi.setSystemTime(new Date("2026-11-04T10:00:00.000Z"));
+
+      const { plan } = await (await callPlan(1)).json<PlanResponse>();
+      expect(plan?.adjustment?.kind).toBe("restart");
+      expect(plan?.sessions).toMatchObject([
+        { date: "2026-11-03", kind: "vma", durationMin: 50, planned: null },
+        { date: "2026-11-05", durationMin: 30 },
+        { date: "2026-11-07", durationMin: 55 },
+      ]);
+    });
+
+    it("anchors the window on midnight in Paris of the plan start", async () => {
+      await saveGoal(1);
+      await importRun(1, 1, 1380, "2026-10-20T07:00:00.000Z");
+      // Lundi 2 novembre 00:30 à Paris : dans la semaine du plan, pas avant.
+      await syncRun(1, 10, 40 * 60, "2026-11-01T23:30:00.000Z");
+      const { plan } = await (await callPlan(1, "POST")).json<PlanResponse>();
+      expect(plan?.adjustment?.kind).toBe("restart");
+    });
+
+    it("drops the adjustment once the plan is over", async () => {
+      await saveGoal(1);
+      await importRun(1, 1, 1380, "2026-10-20T07:00:00.000Z");
+      await callPlan(1, "POST");
+      vi.setSystemTime(new Date("2026-11-09T10:00:00.000Z"));
+      const { plan } = await (await callPlan(1)).json<PlanResponse>();
+      expect(plan?.adjustment).toBeNull();
+      expect(plan?.sessions.map((s) => s.planned)).toEqual([null, null, null]);
+    });
+
+    it("never reduces a taper week for a high volume", async () => {
+      await saveGoal(1, "2026-11-12");
+      await importRun(1, 1, 1380);
+      await syncRun(1, 10, 300 * 60);
+      const { plan } = await (await callPlan(1, "POST")).json<PlanResponse>();
+      expect(plan?.phase).toBe("taper");
+      expect(plan?.adjustment).toBeNull();
+    });
   });
 });
