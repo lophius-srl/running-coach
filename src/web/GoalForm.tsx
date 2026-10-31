@@ -9,6 +9,7 @@ import {
   type GoalField,
   type GoalResponse,
 } from "../worker/goals/rules";
+import { MAX_DISTANCE_M, MIN_DISTANCE_M } from "../core/fitness";
 import { formatDuration, localIsoDate } from "./format";
 import { Paces } from "./Paces";
 
@@ -125,8 +126,8 @@ function DistanceOptions() {
   );
 }
 
-type Fitness = Omit<GoalResponse, "goal">;
-type SaveResult = { errors: GoalErrors } | Fitness;
+type PacesState = Omit<GoalResponse, "goal">;
+type SaveResult = { errors: GoalErrors } | PacesState;
 
 async function fetchGoal(): Promise<GoalResponse> {
   const response = await fetch("/api/goal");
@@ -151,14 +152,15 @@ async function saveGoal(
 }
 
 // Allures, ou la raison de leur absence : pas de course exploitable, ou pas encore d'objectif.
-function PacesOrReason({ paces, basis }: Fitness) {
+function PacesOrReason({ paces, basis }: PacesState) {
   if (paces && basis) return <Paces paces={paces} basis={basis} />;
   return (
     <p className="muted paces-missing">
       {basis
         ? "Enregistre ton objectif pour voir tes allures."
         : "Pas d'allures pour l'instant : aucune course exploitable sur les 8 dernières " +
-          "semaines (course à pied de 3 à 43 km, à une allure réaliste). Synchronise " +
+          `semaines (course à pied de ${MIN_DISTANCE_M / 1000} à ${MAX_DISTANCE_M / 1000} km, ` +
+          "à une allure réaliste). Synchronise " +
           "tes activités Strava ou importe ton historique ci-dessous."}
     </p>
   );
@@ -168,7 +170,10 @@ export function GoalForm() {
   const [form, setForm] = useState<Form>(EMPTY_FORM);
   const [errors, setErrors] = useState<GoalErrors>({});
   const [status, setStatus] = useState<Status>("loading");
-  const [fitness, setFitness] = useState<Fitness>({ paces: null, basis: null });
+  const [fitness, setFitness] = useState<PacesState>({
+    paces: null,
+    basis: null,
+  });
   const [loadAttempt, setLoadAttempt] = useState(0);
 
   // Sans objectif chargé, pas de formulaire : un enregistrement écraserait l'objectif existant.

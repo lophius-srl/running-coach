@@ -38,8 +38,9 @@ export const MIN_DURATION_S = 8 * 60;
 export const MAX_DURATION_S = 6 * 60 * 60;
 // Plus lent que 15 min/km : de la marche (même borne que le chrono visé).
 export const SLOWEST_PACE_S_PER_KM = 15 * 60;
-// Les records du monde du 3 km au marathon valent un VDOT de 84 à 87 : au-delà de 85, la
-// performance est jugée aberrante (GPS, vélo mal typé en course).
+// Plafond de VDOT : les records du monde du 3 km au marathon valent environ 84 à 87, donc
+// au-delà de 85 la performance est jugée aberrante (GPS, vélo mal typé en course), quitte à
+// écarter un niveau proche du record du monde.
 export const MAX_VDOT = 85;
 
 // Fusion par id : la version API (plus fraîche) remplace la version importée.

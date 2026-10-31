@@ -167,7 +167,7 @@ describe("runVdot : seuils d'exploitabilité", () => {
     ).toBeNull();
   });
 
-  it("ignore une allure plus rapide que les records du monde (VDOT > 85)", () => {
+  it("ignore une performance au VDOT > 85 (aberrant)", () => {
     // Record du monde du 10 km (26:11) : VDOT ≈ 85,5.
     expect(
       runVdot(run({ distanceM: 10000, movingTimeS: 1571 }), NOW),
