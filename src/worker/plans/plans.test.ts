@@ -80,12 +80,17 @@ async function importRun(
     .run();
 }
 
-// Activité Strava API (purgée à 7 jours) partie hier.
-async function syncRun(userId: number, id: number, movingTimeS: number) {
+// Activité Strava API (purgée à 7 jours) partie hier par défaut.
+async function syncRun(
+  userId: number,
+  id: number,
+  movingTimeS: number,
+  startDate = "2026-11-01T07:00:00.000Z",
+) {
   const payload = {
     id,
     sport_type: "Run",
-    start_date: "2026-11-01T07:00:00.000Z",
+    start_date: startDate,
     distance: 30000,
     moving_time: movingTimeS,
   };
@@ -433,6 +438,67 @@ describe("/api/plan", () => {
       const stored = JSON.stringify([before.plans, before.plan_sessions]);
       expect(stored).not.toMatch(/volume|reprise|planned|adjust/i);
       expect(await storedSessions()).toEqual(BASE_SESSIONS);
+    });
+
+    it("counts a run both imported and synced only once", async () => {
+      await saveGoal(1);
+      await importRun(1, 1, 1380); // 23 min
+      await importRun(1, 10, 200 * 60, "2026-11-01T07:00:00.000Z");
+      await syncRun(1, 10, 200 * 60); // même activité : 223 min, pas 423
+      const { plan } = await (await callPlan(1, "POST")).json<PlanResponse>();
+      expect(plan?.adjustment?.reason).toMatch(/\(223 min .* −15 %/);
+    });
+
+    it("ignores runs dated in the future", async () => {
+      await saveGoal(1);
+      await importRun(1, 1, 1380);
+      await syncRun(1, 10, 300 * 60, "2026-11-03T07:00:00.000Z");
+      const { plan } = await (await callPlan(1, "POST")).json<PlanResponse>();
+      expect(plan?.adjustment).toBeNull();
+    });
+
+    it("does not use another user's runs", async () => {
+      await saveGoal(1);
+      await saveGoal(2);
+      await importRun(1, 1, 1380);
+      await importRun(2, 2, 1380);
+      await syncRun(2, 10, 300 * 60);
+      const own = await (await callPlan(1, "POST")).json<PlanResponse>();
+      expect(own.plan?.adjustment).toBeNull();
+      const other = await (await callPlan(2, "POST")).json<PlanResponse>();
+      expect(other.plan?.adjustment?.kind).toBe("high_volume");
+    });
+
+    it("restarts with a 20-min footing two days before the race", async () => {
+      await saveGoal(1, "2026-11-04");
+      await importRun(1, 1, 1380, "2026-10-20T07:00:00.000Z");
+      const { plan } = await (await callPlan(1, "POST")).json<PlanResponse>();
+      expect(plan?.adjustment?.kind).toBe("restart");
+      expect(plan?.sessions).toMatchObject([
+        {
+          date: "2026-11-03",
+          kind: "endurance",
+          durationMin: 20,
+          planned: { kind: "endurance", durationMin: 25 },
+        },
+      ]);
+    });
+
+    it("stores the base plan, not the restart adjustment, on POST", async () => {
+      await saveGoal(1);
+      await importRun(1, 1, 1380, "2026-10-20T07:00:00.000Z");
+      const before = await snapshot();
+      await callPlan(1, "POST");
+      const after = await snapshot();
+
+      expect(await storedSessions()).toEqual(BASE_SESSIONS);
+      const untouched = Object.keys(before).filter(
+        (name) => name !== "plans" && name !== "plan_sessions",
+      );
+      for (const name of untouched) expect(after[name]).toEqual(before[name]);
+      expect(JSON.stringify([after.plans, after.plan_sessions])).not.toMatch(
+        /reprise|planned|adjust/i,
+      );
     });
   });
 });

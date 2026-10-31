@@ -147,3 +147,144 @@ describe("adjustPlan", () => {
     expect(adjustPlan(plan, runs, NOW)).toEqual(adjustPlan(plan, runs, NOW));
   });
 });
+
+describe("adjustPlan — cas limites (QA #16)", () => {
+  const sessionsOf = (adjusted: ReturnType<typeof adjustPlan>) =>
+    adjusted.sessions.map(({ kind, durationMin }) => ({ kind, durationMin }));
+
+  it("counts a run exactly 7 days old as outside the window and restarts", () => {
+    expect(adjustPlan(plan, [run(7, 300)], NOW).adjustment?.kind).toBe(
+      "restart",
+    );
+  });
+
+  it("counts a run just inside the 7-day window and does not restart", () => {
+    const justInside = {
+      ...run(0, 60),
+      startDate: new Date(NOW - 7 * DAY_MS + 1000).toISOString(),
+    };
+    expect(adjustPlan(plan, [justInside], NOW).adjustment).toBeNull();
+  });
+
+  it("counts a run starting exactly now", () => {
+    expect(durations([run(0, 222)])).toEqual([50, 40, 65]);
+  });
+
+  it("ignores future runs, also for the restart rule", () => {
+    const adjusted = adjustPlan(plan, [run(-1, 300), run(10, 60, 2)], NOW);
+    expect(adjusted.adjustment?.kind).toBe("restart");
+  });
+
+  it("compares instants, whatever the time zone of the start date", () => {
+    // 2026-10-26T11:30+01:00 = 10:30 UTC : 6 j 23 h 30 avant NOW, donc dans la fenêtre.
+    const offset = { ...run(0, 222), startDate: "2026-10-26T11:30:00+01:00" };
+    expect(durations([offset])).toEqual([50, 40, 65]);
+    // 2026-10-26T10:30+01:00 = 09:30 UTC : 7 j 30 min avant NOW, hors fenêtre.
+    const outside = { ...offset, startDate: "2026-10-26T10:30:00+01:00" };
+    expect(adjustPlan(plan, [outside], NOW).adjustment?.kind).toBe("restart");
+  });
+
+  it("ignores non-run activities for the restart rule", () => {
+    const ride = { ...run(1, 120), sportType: "Ride" };
+    expect(adjustPlan(plan, [ride, run(10, 60, 2)], NOW).adjustment?.kind).toBe(
+      "restart",
+    );
+  });
+
+  it("counts trail and virtual runs in the recent volume", () => {
+    const trail = { ...run(1, 150), sportType: "TrailRun" };
+    const virtual = { ...run(2, 72, 2), sportType: "VirtualRun" };
+    expect(durations([trail, virtual])).toEqual([50, 40, 65]);
+  });
+
+  it("restart keeps 25-min pre-race footings at the 20-min floor", () => {
+    const preRace: WeekPlan = {
+      weekStart: "2026-11-02",
+      phase: "taper",
+      sessions: [
+        {
+          date: "2026-11-03",
+          kind: "endurance",
+          durationMin: 25,
+          description: "F",
+        },
+        {
+          date: "2026-11-04",
+          kind: "endurance",
+          durationMin: 20,
+          description: "F",
+        },
+      ],
+    };
+    const adjusted = adjustPlan(preRace, [run(10, 60)], NOW);
+    expect(adjusted.adjustment?.kind).toBe("restart");
+    expect(adjusted.sessions).toMatchObject([
+      { durationMin: 20, planned: { kind: "endurance", durationMin: 25 } },
+      { durationMin: 20, planned: null },
+    ]);
+  });
+
+  it("never lengthens a session shorter than the 20-min floor", () => {
+    const short: WeekPlan = {
+      ...plan,
+      sessions: [
+        {
+          date: "2026-11-03",
+          kind: "recovery",
+          durationMin: 15,
+          description: "R",
+        },
+      ],
+    };
+    const adjusted = adjustPlan(short, [run(1, 600)], NOW);
+    expect(adjusted.sessions).toMatchObject([
+      { durationMin: 15, planned: null },
+    ]);
+  });
+
+  it("restart on a plan without quality session only shortens the sessions", () => {
+    const easy: WeekPlan = {
+      ...plan,
+      sessions: [plan.sessions[1], plan.sessions[2]],
+    };
+    const adjusted = adjustPlan(easy, [run(10, 60)], NOW);
+    expect(sessionsOf(adjusted)).toEqual([
+      { kind: "endurance", durationMin: 30 },
+      { kind: "long", durationMin: 55 },
+    ]);
+    expect(adjusted.sessions.map((s) => s.description)).toEqual(["F", "SL"]);
+  });
+
+  it("restart turns every quality kind into a footing", () => {
+    const quality: WeekPlan = {
+      ...plan,
+      sessions: [
+        {
+          date: "2026-11-03",
+          kind: "threshold",
+          durationMin: 65,
+          description: "S",
+        },
+        {
+          date: "2026-11-05",
+          kind: "race_pace",
+          durationMin: 45,
+          description: "AS",
+        },
+      ],
+    };
+    expect(sessionsOf(adjustPlan(quality, [run(10, 60)], NOW))).toEqual([
+      { kind: "endurance", durationMin: 45 },
+      { kind: "endurance", durationMin: 30 },
+    ]);
+  });
+
+  it("does not mutate the plan nor the runs", () => {
+    const planCopy = JSON.parse(JSON.stringify(plan));
+    const runs = [run(1, 300)];
+    const runsCopy = JSON.parse(JSON.stringify(runs));
+    adjustPlan(plan, runs, NOW);
+    expect(plan).toEqual(planCopy);
+    expect(runs).toEqual(runsCopy);
+  });
+});
