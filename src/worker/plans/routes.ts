@@ -1,19 +1,27 @@
 // Plan de la semaine (issue #15) : généré par src/core/plan (déterministe), stocké dans les
-// tables durables plans / plan_sessions (« plans générés », ADR 0003), sans les allures cibles.
+// tables durables plans / plan_sessions (« plans générés », ADR 0003), sans les allures cibles
+// ni l'ajustement aux courses récentes (#16) : tous deux recalculés à chaque lecture.
 
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import type { TrainingPaces } from "../../core/paces";
+import { estimateFitness } from "../../core/fitness";
 import { trainingPaces } from "../../core/paces";
+import { adjustPlan } from "../../core/plan-adjust";
 import {
   generateWeekPlan,
   type PlanPhase,
   type SessionKind,
   type WeekPlan,
 } from "../../core/plan";
-import { loadFitness } from "../goals/fitness";
+import { loadRuns } from "../goals/fitness";
 import { toGoal, type GoalRow } from "../goals/routes";
-import { APP_TIME_ZONE, localIsoDate, type Goal } from "../goals/rules";
+import {
+  APP_TIME_ZONE,
+  localIsoDate,
+  zonedMidnightMs,
+  type Goal,
+} from "../goals/rules";
 import { withTargetPaces, type PlanError } from "./view";
 
 type PlanRow = {
@@ -69,32 +77,45 @@ function toPlan(rows: PlanRow[]): WeekPlan | null {
 }
 
 async function loadGoalAndPaces(db: D1Database, userId: number, nowMs: number) {
-  const [row, fitness] = await Promise.all([
+  const [row, runs] = await Promise.all([
     db.prepare(SELECT_GOAL).bind(userId).first<GoalRow & { id: number }>(),
-    loadFitness(db, userId, nowMs),
+    loadRuns(db, userId, nowMs),
   ]);
   const goal: Goal | null = row && toGoal(row);
+  const fitness = estimateFitness(runs, nowMs);
   const paces: TrainingPaces | null =
     goal && fitness && trainingPaces({ ...goal, vdot: fitness.vdot });
-  return { goalId: row?.id ?? null, goal, paces };
+  // Plan affiché : plan de base ajusté aux courses récentes, avec les allures du moment.
+  // Décision ancrée sur le début du plan (minuit à Paris de weekStart) : stable toute la semaine.
+  const view = (plan: WeekPlan) =>
+    withTargetPaces(
+      adjustPlan(
+        plan,
+        runs,
+        zonedMidnightMs(plan.weekStart, APP_TIME_ZONE),
+        localIsoDate(nowMs, APP_TIME_ZONE),
+      ),
+      paces,
+    );
+  return { goalId: row?.id ?? null, goal, paces, view };
 }
 
 export const planRoutes = new Hono<AppEnv>();
 
 planRoutes.get("/", async (c) => {
   const userId = c.get("userId");
-  const [{ paces }, { results }] = await Promise.all([
+  const [{ view }, { results }] = await Promise.all([
     loadGoalAndPaces(c.env.DB, userId, Date.now()),
     c.env.DB.prepare(LATEST_PLAN).bind(userId).all<PlanRow>(),
   ]);
   const plan = toPlan(results);
-  return c.json({ plan: plan && withTargetPaces(plan, paces) });
+  return c.json({ plan: plan && view(plan) });
 });
 
 planRoutes.post("/", async (c) => {
   const nowMs = Date.now();
   const db = c.env.DB;
-  const { goalId, goal, paces } = await loadGoalAndPaces(
+  const { goalId, goal, paces, view } = await loadGoalAndPaces(
     db,
     c.get("userId"),
     nowMs,
@@ -113,5 +134,5 @@ planRoutes.post("/", async (c) => {
     db.prepare(INSERT_PLAN).bind(goalId, plan.weekStart, plan.phase),
     db.prepare(INSERT_SESSIONS).bind(goalId, JSON.stringify(plan.sessions)),
   ]);
-  return c.json({ plan: withTargetPaces(plan, paces) });
+  return c.json({ plan: view(plan) });
 });

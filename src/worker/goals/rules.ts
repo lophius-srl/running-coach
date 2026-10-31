@@ -69,6 +69,27 @@ export function localIsoDate(nowMs: number, timeZone: string): string {
   }).format(nowMs);
 }
 
+// Décalage du fuseau à un instant donné, en ms (ex. +3 600 000 à Paris en hiver).
+function zoneOffsetMs(atMs: number, timeZone: string): number {
+  const name = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    timeZoneName: "longOffset",
+  })
+    .formatToParts(atMs)
+    .find((part) => part.type === "timeZoneName")?.value;
+  const match = /GMT([+-])(\d{2}):(\d{2})/.exec(name ?? "");
+  if (!match) return 0; // « GMT » seul : UTC
+  const minutes = Number(match[2]) * 60 + Number(match[3]);
+  return (match[1] === "-" ? -1 : 1) * minutes * 60_000;
+}
+
+// Instant de minuit du jour `isoDate` (AAAA-MM-JJ) dans le fuseau donné. Les changements
+// d'heure de Paris ont lieu à 2 h ou 3 h, jamais à minuit.
+export function zonedMidnightMs(isoDate: string, timeZone: string): number {
+  const utcMidnight = Date.parse(`${isoDate}T00:00:00Z`);
+  return utcMidnight - zoneOffsetMs(utcMidnight, timeZone);
+}
+
 function isIsoDate(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;

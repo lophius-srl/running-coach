@@ -52,11 +52,12 @@ export function stravaRunSample(payload: string): RunSample | null {
   };
 }
 
-export async function loadFitness(
+// Courses des 8 dernières semaines (+1 jour de marge), historique importé et API fusionnés.
+export async function loadRuns(
   db: D1Database,
   userId: number,
   nowMs: number,
-): Promise<Fitness | null> {
+): Promise<RunSample[]> {
   const since = new Date(
     nowMs - (FITNESS_WINDOW_DAYS + 1) * DAY_MS,
   ).toISOString();
@@ -67,8 +68,13 @@ export async function loadFitness(
   const apiRuns = (api.results as { payload: string }[])
     .map((row) => stravaRunSample(row.payload))
     .filter((run) => run !== null);
-  return estimateFitness(
-    mergeRuns(imported.results as RunSample[], apiRuns),
-    nowMs,
-  );
+  return mergeRuns(imported.results as RunSample[], apiRuns);
+}
+
+export async function loadFitness(
+  db: D1Database,
+  userId: number,
+  nowMs: number,
+): Promise<Fitness | null> {
+  return estimateFitness(await loadRuns(db, userId, nowMs), nowMs);
 }

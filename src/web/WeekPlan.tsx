@@ -6,9 +6,11 @@ import { formatPaceRange, localIsoDate } from "./format";
 import {
   formatPlanDay,
   formatPlanPeriod,
+  formatSessionDuration,
   isPlanOver,
   PHASE_LABELS,
   planErrorMessage,
+  replacedKindLabel,
   SESSION_LABELS,
 } from "./plan";
 import { Alert, Loading } from "./ui";
@@ -95,6 +97,7 @@ function PlanSessions({ plan }: { plan: PlanView }) {
       {plan.sessions.map((session) => {
         const hard = HARD_KINDS.has(session.kind);
         const pace = session.targetPace;
+        const replaced = replacedKindLabel(session);
         return (
           <li
             key={session.date}
@@ -106,11 +109,14 @@ function PlanSessions({ plan }: { plan: PlanView }) {
             <h3 className="plan-kind">
               {SESSION_LABELS[session.kind]}
               {hard && <span className="plan-tag">Séance dure</span>}
+              {replaced && (
+                <span className="muted plan-replaced">{replaced}</span>
+              )}
             </h3>
             <dl className="run-stats plan-stats">
               <div>
                 <dt>Durée</dt>
-                <dd>{session.durationMin} min</dd>
+                <dd>{formatSessionDuration(session)}</dd>
               </div>
               <div>
                 <dt>Allure cible</dt>
@@ -204,6 +210,11 @@ export function WeekPlan({ goal, syncCount }: Props) {
       {plan && (
         <p className="muted">
           {formatPlanPeriod(plan.weekStart)} · {PHASE_LABELS[plan.phase]}
+        </p>
+      )}
+      {plan?.adjustment && (
+        <p className="card state plan-adjustment" role="status">
+          {plan.adjustment.reason}
         </p>
       )}
       {over && (
