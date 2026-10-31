@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatDay,
   formatDistance,
   formatDuration,
   formatHeartrate,
@@ -71,6 +72,18 @@ describe("formatSpeedRange", () => {
     expect(formatSpeedRange(300, 360)).toBe("10,0 – 12,0 km/h");
     // 5:05/km ≈ 11,80 km/h ; 5:11/km ≈ 11,58 km/h.
     expect(formatSpeedRange(305, 311)).toBe("11,6 – 11,8 km/h");
+  });
+});
+
+describe("formatDay", () => {
+  it("shows the calendar day with the full month and year", () => {
+    expect(formatDay("2021-03-14T07:02:11.000Z", "UTC")).toBe("14 mars 2021");
+  });
+
+  it("shows the day in the requested time zone", () => {
+    expect(formatDay("2021-12-31T23:30:00.000Z", "Europe/Paris")).toBe(
+      "1 janvier 2022",
+    );
   });
 });
 

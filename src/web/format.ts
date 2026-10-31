@@ -69,3 +69,13 @@ export function formatRunName(name: string): string {
 export function localIsoDate(date: Date): string {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
+
+// Jour calendaire lisible (« 14 mars 2021 »), dans le fuseau du navigateur par défaut.
+export function formatDay(iso: string, timeZone?: string): string {
+  return new Date(iso).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone,
+  });
+}
