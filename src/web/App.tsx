@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { RecentRuns as RecentRunsData } from "../worker/activities/recent";
 import { GoalForm } from "./GoalForm";
+import { HistoryImport } from "./HistoryImport";
 import { RecentRuns } from "./RecentRuns";
 
 type Session =
@@ -195,6 +196,7 @@ export function App() {
               <Alert message="Impossible de charger tes courses récentes." />
             )}
             <GoalForm />
+            <HistoryImport />
           </>
         )}
       </main>
