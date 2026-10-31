@@ -245,6 +245,13 @@ a {
     background: var(--color-surface);
   }
 
+  /* Un élément focalisé au clavier n'est jamais masqué par la barre (WCAG 2.4.11). */
+  html {
+    scroll-padding-bottom: calc(
+      var(--tabbar-height) + env(safe-area-inset-bottom) + var(--space-3)
+    );
+  }
+
   /* Le contenu et le pied de page ne passent jamais sous la barre d'onglets. */
   .layout-app {
     padding-bottom: calc(
