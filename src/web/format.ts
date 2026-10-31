@@ -1,5 +1,8 @@
 // Formatage d'affichage du tableau de bord (fonctions pures, testées sans React).
 
+import type { PaceBasis } from "../core/fitness";
+import { formatTime } from "../core/paces";
+
 function pad2(value: number): string {
   return String(value).padStart(2, "0");
 }
@@ -78,4 +81,17 @@ export function formatDay(iso: string, timeZone?: string): string {
     year: "numeric",
     timeZone,
   });
+}
+
+// Course d'où viennent les allures : « d'après ta sortie du 12 oct. : 10,00 km en 48:30 ».
+export function formatPaceBasis(basis: PaceBasis, timeZone?: string): string {
+  const day = new Date(basis.startDate).toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    timeZone,
+  });
+  return (
+    `d'après ta sortie du ${day} : ${formatDistance(basis.distanceM)} ` +
+    `en ${formatTime(basis.movingTimeS)}`
+  );
 }
