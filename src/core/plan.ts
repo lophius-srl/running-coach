@@ -11,13 +11,15 @@
 // - Séances dures : sortie longue, seuil, VMA et allure spécifique. Jamais deux jours de suite,
 //   y compris du dimanche au lundi (la semaine type se répète).
 // - Une sortie longue par semaine, le dimanche, sinon le samedi, sinon le dernier jour coché.
-// - Séances de qualité en plus : 1 jusqu'à 3 jours ou en affûtage, 2 à partir de 4 jours ;
+// - Séances de qualité en plus : 1 jusqu'à 4 jours ou en affûtage, 2 à partir de 5 jours
+//   (avec 4 jours, 3 séances dures sur 4 serait trop) ;
 //   placées le plus loin possible des autres séances dures (à égalité, le jour le plus tôt),
 //   et abandonnées (footing) si aucun jour non adjacent ne reste.
 // - Le lendemain de la sortie longue est une récupération ; les autres jours, du footing.
 // - Le plan couvre les 7 jours à partir d'aujourd'hui, avant le jour de course ; les deux jours
-//   qui précèdent la course, toute séance devient un footing court (pas de sortie longue
-//   exigée la semaine de la course).
+//   qui précèdent la course, toute séance devient un footing court ; à 5 jours ou moins de la
+//   course, la sortie longue devient un footing (pas de sortie longue la semaine de la course).
+// - Sans jour disponible, pas de séance (l'API refuse la génération).
 
 export type PlanPhase = "development" | "specific" | "taper";
 export type SessionKind =
@@ -47,6 +49,7 @@ export type PlanInput = {
 export const TAPER_MAX_DAYS = 14;
 export const SPECIFIC_MAX_DAYS = 56;
 export const PRE_RACE_EASY_DAYS = 2;
+export const NO_LONG_RUN_DAYS = 5;
 
 export const HARD_KINDS: ReadonlySet<SessionKind> = new Set([
   "long",
@@ -132,9 +135,10 @@ export function weekTemplate(
   phase: PlanPhase,
 ): Map<number, SessionKind> {
   const sorted = [...new Set(days)].sort((a, b) => a - b);
+  if (sorted.length === 0) return new Map();
   const longDay = longRunDay(sorted);
   const template = new Map<number, SessionKind>([[longDay, "long"]]);
-  const qualityCount = phase === "taper" || sorted.length <= 3 ? 1 : 2;
+  const qualityCount = phase === "taper" || sorted.length <= 4 ? 1 : 2;
   for (const kind of QUALITY_KINDS[phase].slice(0, qualityCount)) {
     const hardDays = [...template.keys()];
     let best: { day: number; gap: number } | null = null;
@@ -214,9 +218,13 @@ export function generateWeekPlan(input: PlanInput): WeekPlan | null {
   const sessions: PlannedSession[] = [];
   for (let offset = 0; offset < 7; offset++) {
     const date = addDays(input.today, offset);
-    const kind = template.get(isoWeekday(date));
+    const planned = template.get(isoWeekday(date));
     const daysToRace = daysBetween(date, input.raceDate);
-    if (kind === undefined || daysToRace <= 0) continue;
+    if (planned === undefined || daysToRace <= 0) continue;
+    const kind =
+      planned === "long" && daysToRace <= NO_LONG_RUN_DAYS
+        ? "endurance"
+        : planned;
     const preRace = daysToRace <= PRE_RACE_EASY_DAYS;
     sessions.push({
       date,

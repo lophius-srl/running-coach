@@ -105,13 +105,18 @@ describe("weekTemplate", () => {
     expect(weekTemplate([1, 7], "specific").get(1)).toBe("recovery");
   });
 
-  it("plans 1 quality session up to 3 days, 2 from 4 days, 1 in taper", () => {
+  it("plans 1 quality session up to 4 days, 2 from 5 days, 1 in taper", () => {
     const quality = (days: number[], phase: PlanPhase) =>
       hardDays(weekTemplate(days, phase)).length - 1;
     expect(quality([2, 4, 7], "development")).toBe(1);
-    expect(quality([1, 3, 5, 7], "development")).toBe(2);
+    expect(quality([1, 3, 5, 7], "development")).toBe(1);
+    expect(quality([1, 3, 4, 5, 7], "development")).toBe(2);
     expect(quality([1, 2, 3, 4, 5, 6, 7], "specific")).toBe(2);
     expect(quality([1, 3, 5, 7], "taper")).toBe(1);
+  });
+
+  it("plans nothing without an available day", () => {
+    expect(weekTemplate([], "development").size).toBe(0);
   });
 
   it("picks quality types by phase", () => {
@@ -237,6 +242,20 @@ describe("generateWeekPlan", () => {
         description: expect.stringContaining("arriver frais"),
       },
     ]);
+  });
+
+  it("turns the long run into a footing 5 days or less before the race", () => {
+    const sundayRun = (raceDate: string) =>
+      generateWeekPlan({
+        ...input,
+        availableDays: [2, 7],
+        raceDate,
+      })?.sessions.find((s) => s.date === "2026-11-08");
+    expect(sundayRun("2026-11-14")).toMatchObject({ kind: "long" }); // J-6
+    expect(sundayRun("2026-11-13")).toMatchObject({
+      kind: "endurance",
+      durationMin: 35,
+    }); // J-5
   });
 
   it("returns null when the race is today or past", () => {
