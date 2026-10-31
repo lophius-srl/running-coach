@@ -1,7 +1,7 @@
 // Libellés et formatage du plan de la semaine (fonctions pures, testées sans React).
 
 import { addDays, type PlanPhase, type SessionKind } from "../core/plan";
-import type { PlanError } from "../worker/plans/view";
+import type { PlanError, PlanSessionView } from "../worker/plans/view";
 
 export const SESSION_LABELS: Record<SessionKind, string> = {
   endurance: "Footing",
@@ -49,4 +49,20 @@ export function formatPlanPeriod(weekStart: string): string {
 // Plan terminé : son dernier jour (weekStart + 6) est passé. `today` en AAAA-MM-JJ.
 export function isPlanOver(weekStart: string, today: string): boolean {
   return addDays(weekStart, 6) < today;
+}
+
+// Durée affichée : « 40 min (prévu 45) » quand l'ajustement aux courses récentes l'a changée.
+export function formatSessionDuration(session: PlanSessionView): string {
+  const { durationMin, planned } = session;
+  return planned && planned.durationMin !== durationMin
+    ? `${durationMin} min (prévu ${planned.durationMin})`
+    : `${durationMin} min`;
+}
+
+// Séance remplacée par l'ajustement : « prévu : Fractionné VMA », sinon null.
+export function replacedKindLabel(session: PlanSessionView): string | null {
+  const { kind, planned } = session;
+  return planned && planned.kind !== kind
+    ? `prévu : ${SESSION_LABELS[planned.kind]}`
+    : null;
 }

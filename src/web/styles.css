@@ -788,7 +788,14 @@ a {
   }
 }
 
-.plan-over {
+.plan-replaced {
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+}
+
+/* Ajustement aux courses récentes (#16) : bandeau sous la phase. */
+.plan-over,
+.plan-adjustment {
   border-left: var(--accent-width) solid var(--color-strava);
   font-weight: 600;
 }

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { PlanSessionView } from "../worker/plans/view";
 import {
   formatPlanDay,
+  formatSessionDuration,
+  replacedKindLabel,
   formatPlanPeriod,
   isPlanOver,
   planErrorMessage,
@@ -43,5 +46,33 @@ describe("isPlanOver", () => {
     expect(isPlanOver("2026-11-03", "2026-11-09")).toBe(false);
     expect(isPlanOver("2026-11-03", "2026-11-10")).toBe(true);
     expect(isPlanOver("2026-12-28", "2027-01-04")).toBe(true);
+  });
+});
+
+describe("adjusted sessions", () => {
+  const session: PlanSessionView = {
+    date: "2026-11-03",
+    kind: "endurance",
+    durationMin: 35,
+    description: "",
+    targetPace: null,
+    planned: null,
+  };
+
+  it("shows the planned duration and kind only when changed", () => {
+    expect(formatSessionDuration(session)).toBe("35 min");
+    expect(replacedKindLabel(session)).toBeNull();
+    const adjusted = { ...session, planned: { kind: "vma", durationMin: 50 } };
+    expect(formatSessionDuration(adjusted as PlanSessionView)).toBe(
+      "35 min (prévu 50)",
+    );
+    expect(replacedKindLabel(adjusted as PlanSessionView)).toBe(
+      "prévu : Fractionné VMA",
+    );
+    const sameKind = {
+      ...session,
+      planned: { kind: "endurance", durationMin: 45 },
+    };
+    expect(replacedKindLabel(sameKind as PlanSessionView)).toBeNull();
   });
 });
