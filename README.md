@@ -25,6 +25,7 @@ Makefile                   Commandes uniques (install, lint, test, build, deploy
   CODEOWNERS
   dependabot.yml
 docs/adr/                  Décisions d'architecture
+docs/strava-webhook.md     Création manuelle de l'abonnement webhook Strava
 scripts/setup-github.sh    Labels, protection de main, board GitHub Projects
 ```
 
