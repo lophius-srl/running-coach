@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { AppEnv } from "../env";
+import { ownerAthleteId } from "../owner";
 import { deauthorize, exchangeCode, StravaError } from "../strava/client";
 import { endSession, startSession } from "./session";
 
@@ -17,12 +18,6 @@ const stateCookieOptions = {
   secure: true,
   sameSite: "Lax",
 } as const;
-
-// Fail closed : sans OWNER_ATHLETE_ID valide, aucune connexion n'est possible.
-export function ownerAthleteId(raw: string | undefined): number | null {
-  const value = raw?.trim() ?? "";
-  return /^\d+$/.test(value) ? Number(value) : null;
-}
 
 function randomState(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));

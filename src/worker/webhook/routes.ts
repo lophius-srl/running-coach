@@ -2,8 +2,8 @@
 // Public (hors session) : Strava n'envoie ni cookie ni signature.
 
 import { Hono } from "hono";
-import { ownerAthleteId } from "../auth/routes";
 import type { AppEnv } from "../env";
+import { ownerAthleteId } from "../owner";
 import { processWebhookAction } from "./process";
 import {
   checkSubscriptionRequest,
