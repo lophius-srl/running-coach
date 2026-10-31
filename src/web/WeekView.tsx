@@ -6,19 +6,7 @@ import { MissingPaces, ZONES } from "./Paces";
 import { RecentRuns } from "./RecentRuns";
 import { Alert, Loading } from "./ui";
 import type { GoalState } from "./useGoal";
-
-type SyncState =
-  | { status: "idle" }
-  | { status: "running" }
-  | { status: "done"; imported: number }
-  | { status: "failed" };
-
-async function requestSync(): Promise<SyncState> {
-  const response = await fetch("/api/sync", { method: "POST" });
-  if (!response.ok) return { status: "failed" };
-  const { imported } = (await response.json()) as { imported: number };
-  return { status: "done", imported };
-}
+import type { SyncState } from "./useSync";
 
 // Message de suivi (zone role="status") ; l'échec est affiché à part, en alerte.
 function syncMessage(sync: SyncState): string {
@@ -84,29 +72,25 @@ function PacesSummary({ goal }: { goal: GoalState }) {
 type Props = {
   athleteId: number;
   goal: GoalState;
-  onSynced: () => void; // de nouvelles courses peuvent changer les allures
+  sync: SyncState;
+  syncCount: number; // change à chaque sync réussie : les runs sont rechargés
+  onSync: () => void;
 };
 
-export function WeekView({ athleteId, goal, onSynced }: Props) {
-  const [sync, setSync] = useState<SyncState>({ status: "idle" });
+export function WeekView({ athleteId, goal, sync, syncCount, onSync }: Props) {
   const [activities, setActivities] = useState<ActivitiesState>({
     status: "loading",
   });
 
   useEffect(() => {
-    loadActivities().then(setActivities);
-  }, []);
-
-  async function synchronize() {
-    setSync({ status: "running" });
-    const result = await requestSync().catch((): SyncState => ({
-      status: "failed",
-    }));
-    setSync(result);
-    if (result.status !== "done") return;
-    onSynced();
-    setActivities(await loadActivities());
-  }
+    let active = true;
+    loadActivities().then((loaded) => {
+      if (active) setActivities(loaded);
+    });
+    return () => {
+      active = false;
+    };
+  }, [syncCount]);
 
   const syncing = sync.status === "running";
 
@@ -117,7 +101,7 @@ export function WeekView({ athleteId, goal, onSynced }: Props) {
         <button
           type="button"
           className="button button-primary"
-          onClick={synchronize}
+          onClick={onSync}
           disabled={syncing}
           aria-busy={syncing}
         >

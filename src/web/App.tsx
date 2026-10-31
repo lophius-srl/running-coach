@@ -7,6 +7,7 @@ import { APP_NAME, documentTitle, routeFor } from "./routes";
 import { Loading } from "./ui";
 import { useGoal } from "./useGoal";
 import { useRoute } from "./useRoute";
+import { useSync } from "./useSync";
 import { WeekView } from "./WeekView";
 
 type Session =
@@ -42,6 +43,7 @@ type ConnectedProps = { athleteId: number; onLogout: () => void };
 function ConnectedApp({ athleteId, onLogout }: ConnectedProps) {
   const view = useRoute();
   const goal = useGoal(view);
+  const sync = useSync(goal.refresh);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const shownView = useRef(view);
 
@@ -77,7 +79,9 @@ function ConnectedApp({ athleteId, onLogout }: ConnectedProps) {
         <WeekView
           athleteId={athleteId}
           goal={goal.state}
-          onSynced={goal.refresh}
+          sync={sync.state}
+          syncCount={sync.syncCount}
+          onSync={sync.synchronize}
         />
       )}
       {view === "goal" && (
