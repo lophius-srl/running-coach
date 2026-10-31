@@ -1,0 +1,212 @@
+import { applyD1Migrations, env } from "cloudflare:test";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { generateSignedCookie } from "hono/cookie";
+import { app } from "../index";
+import type { Bindings } from "../env";
+import { resetDatabase } from "../test-db";
+import { trainingPaces, vdot } from "../../core/paces";
+import type { PlanResponse } from "./view";
+
+const testEnv: Bindings = { ...env, SESSION_SECRET: "session-secret" };
+const goal = {
+  distanceM: 10000,
+  raceDate: "2027-04-11",
+  targetTimeS: 2700,
+  availableDays: [2, 4, 6],
+};
+
+beforeAll(async () => {
+  await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
+});
+beforeEach(() => resetDatabase(env.DB));
+beforeEach(async () => {
+  await env.DB.prepare(
+    "INSERT INTO users (id, strava_athlete_id) VALUES (1, 42), (2, 43)",
+  ).run();
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-02T10:00:00.000Z")); // un lundi
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+async function cookie(userId: number) {
+  const signed = await generateSignedCookie(
+    "session",
+    `${userId}.9999999999`,
+    testEnv.SESSION_SECRET,
+    { prefix: "host", secure: true, path: "/" },
+  );
+  return signed.split(";")[0];
+}
+
+async function callPlan(userId: number, method: "GET" | "POST" = "GET") {
+  return app.request(
+    "https://coach.example/api/plan",
+    { method, headers: { Cookie: await cookie(userId) } },
+    testEnv,
+  );
+}
+
+async function saveGoal(userId: number, raceDate = goal.raceDate) {
+  await env.DB.prepare(
+    "INSERT INTO goals (user_id, race_date, distance_m, target_time_s, available_days) VALUES (?, ?, ?, ?, ?)",
+  )
+    .bind(userId, raceDate, goal.distanceM, goal.targetTimeS, "[2,4,6]")
+    .run();
+}
+
+// Course importée il y a 13 jours : base du niveau (VDOT) et donc des allures.
+async function importRun(userId: number, id: number, movingTimeS: number) {
+  await env.DB.prepare(
+    `INSERT INTO imported_activities (user_id, id, start_date, sport_type, distance_m, moving_time_s)
+     VALUES (?, ?, '2026-10-20T07:00:00.000Z', 'Run', 5000, ?)`,
+  )
+    .bind(userId, id, movingTimeS)
+    .run();
+}
+
+const pacesFor = (movingTimeS: number) =>
+  trainingPaces({ ...goal, vdot: vdot(5000, movingTimeS) });
+
+describe("/api/plan", () => {
+  it("requires a session", async () => {
+    for (const method of ["GET", "POST"]) {
+      const response = await app.request(
+        "https://coach.example/api/plan",
+        { method },
+        testEnv,
+      );
+      expect(response.status).toBe(401);
+    }
+  });
+
+  it("returns null before any plan is generated", async () => {
+    expect(await (await callPlan(1)).json()).toEqual({ plan: null });
+  });
+
+  it("refuses to generate without a goal", async () => {
+    await importRun(1, 1, 1380);
+    const response = await callPlan(1, "POST");
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "no_goal" });
+  });
+
+  it("refuses to generate without paces", async () => {
+    await saveGoal(1);
+    const response = await callPlan(1, "POST");
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "no_paces" });
+  });
+
+  it("refuses to generate once the race is past", async () => {
+    await saveGoal(1, "2026-11-02");
+    await importRun(1, 1, 1380);
+    const response = await callPlan(1, "POST");
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: "race_passed" });
+  });
+
+  it("generates one session per available day with its target pace, then returns it", async () => {
+    await saveGoal(1);
+    await importRun(1, 1, 1380);
+    const paces = pacesFor(1380);
+
+    const response = await callPlan(1, "POST");
+    expect(response.status).toBe(200);
+    const { plan } = await response.json<PlanResponse>();
+    expect(plan).toMatchObject({
+      weekStart: "2026-11-02",
+      phase: "development",
+      sessions: [
+        { date: "2026-11-03", kind: "vma", targetPace: paces.vma },
+        { date: "2026-11-05", kind: "endurance", targetPace: paces.endurance },
+        { date: "2026-11-07", kind: "long", targetPace: paces.endurance },
+      ],
+    });
+    expect(await (await callPlan(1)).json()).toEqual({ plan });
+  });
+
+  it("stores the plan without target paces", async () => {
+    await saveGoal(1);
+    await importRun(1, 1, 1380);
+    await callPlan(1, "POST");
+    const plans = await env.DB.prepare(
+      "SELECT week_start, phase FROM plans",
+    ).all();
+    const sessions = await env.DB.prepare(
+      "SELECT * FROM plan_sessions ORDER BY scheduled_date",
+    ).all<Record<string, unknown>>();
+    expect(plans.results).toEqual([
+      { week_start: "2026-11-02", phase: "development" },
+    ]);
+    expect(sessions.results.map((row) => Object.keys(row).sort())).toEqual(
+      Array(3).fill([
+        "description",
+        "duration_min",
+        "id",
+        "kind",
+        "plan_id",
+        "scheduled_date",
+      ]),
+    );
+  });
+
+  it("recomputes target paces from the current level when reading", async () => {
+    await saveGoal(1);
+    await importRun(1, 1, 1380);
+    await callPlan(1, "POST");
+    await importRun(1, 2, 1260); // 5 km plus rapide : meilleur niveau
+    const { plan } = await (await callPlan(1)).json<PlanResponse>();
+    expect(plan?.sessions[0].targetPace).toEqual(pacesFor(1260).vma);
+
+    vi.setSystemTime(new Date("2027-01-10T10:00:00.000Z")); // course hors des 8 semaines
+    const later = await (await callPlan(1)).json<PlanResponse>();
+    expect(later.plan?.sessions[0]).toMatchObject({
+      kind: "vma",
+      targetPace: null,
+    });
+  });
+
+  it("is deterministic and returns the latest plan", async () => {
+    await saveGoal(1);
+    await importRun(1, 1, 1380);
+    const first = await (await callPlan(1, "POST")).json();
+    const second = await (await callPlan(1, "POST")).json();
+    expect(second).toEqual(first);
+
+    vi.setSystemTime(new Date("2026-11-05T10:00:00.000Z"));
+    const { plan } = await (await callPlan(1, "POST")).json<PlanResponse>();
+    expect(plan?.weekStart).toBe("2026-11-05");
+    expect(await (await callPlan(1)).json()).toEqual({ plan });
+  });
+
+  it("keeps each user's plan separate", async () => {
+    await saveGoal(1);
+    await importRun(1, 1, 1380);
+    await callPlan(1, "POST");
+    expect(await (await callPlan(2)).json()).toEqual({ plan: null });
+  });
+
+  it("returns a plan without sessions when the race is tomorrow on a rest day", async () => {
+    await env.DB.prepare(
+      "INSERT INTO goals (user_id, race_date, distance_m, available_days) VALUES (1, '2026-11-03', 10000, '[4,6]')",
+    ).run();
+    await importRun(1, 1, 1380);
+    const { plan } = await (await callPlan(1, "POST")).json<PlanResponse>();
+    expect(plan).toEqual({
+      weekStart: "2026-11-02",
+      phase: "taper",
+      sessions: [],
+    });
+    expect(await (await callPlan(1)).json()).toEqual({ plan });
+  });
+});

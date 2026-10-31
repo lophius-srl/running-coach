@@ -12,14 +12,14 @@ import {
 
 // Les colonnes reference_distance_m / reference_time_s restent en base (migrations additives,
 // ADR 0002) mais ne sont plus lues ni écrites depuis #46.
-type GoalRow = {
+export type GoalRow = {
   distance_m: number;
   race_date: string;
   target_time_s: number | null;
   available_days: string;
 };
 
-function toGoal(row: GoalRow): Goal {
+export function toGoal(row: GoalRow): Goal {
   const days: unknown = JSON.parse(row.available_days);
   return {
     distanceM: row.distance_m,

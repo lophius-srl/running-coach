@@ -68,6 +68,22 @@ describe("D1 migrations", () => {
     ]);
   });
 
+  // Compatibilité N-1 : le code précédent crée des plans et séances sans ces colonnes.
+  it("add nullable plan detail columns", async () => {
+    const planColumns = (await columns("plans")).filter((column) =>
+      ["week_start", "phase"].includes(column.name),
+    );
+    const duration = (await columns("plan_sessions")).find(
+      (column) => column.name === "duration_min",
+    );
+
+    expect(planColumns).toEqual([
+      expect.objectContaining({ name: "week_start", notnull: 0 }),
+      expect.objectContaining({ name: "phase", notnull: 0 }),
+    ]);
+    expect(duration?.notnull).toBe(0);
+  });
+
   it("are idempotent when applied twice", async () => {
     await expect(
       applyD1Migrations(env.DB, env.TEST_MIGRATIONS),
