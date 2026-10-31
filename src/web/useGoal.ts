@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { GoalResponse } from "../worker/goals/rules";
 
 export type GoalState =
@@ -18,16 +18,20 @@ async function fetchGoal(): Promise<GoalResponse> {
 export function useGoal(refreshKey: string) {
   const [state, setState] = useState<GoalState>({ status: "loading" });
   const [attempt, setAttempt] = useState(0);
+  // Incrémentée à chaque enregistrement : une lecture lancée avant ne l'écrase pas.
+  const version = useRef(0);
 
   useEffect(() => {
+    const startedAt = version.current;
     let active = true;
+    const isCurrent = () => active && version.current === startedAt;
     fetchGoal().then(
       (data) => {
-        if (active) setState({ status: "loaded", data });
+        if (isCurrent()) setState({ status: "loaded", data });
       },
       () => {
         // Un rechargement en échec garde les données déjà affichées.
-        if (active)
+        if (isCurrent())
           setState((current) =>
             current.status === "loaded" ? current : { status: "failed" },
           );
@@ -43,10 +47,10 @@ export function useGoal(refreshKey: string) {
     setState({ status: "loading" });
     setAttempt((count) => count + 1);
   }, []);
-  const replace = useCallback(
-    (data: GoalResponse) => setState({ status: "loaded", data }),
-    [],
-  );
+  const replace = useCallback((data: GoalResponse) => {
+    version.current += 1;
+    setState({ status: "loaded", data });
+  }, []);
 
   return { state, refresh, retry, replace };
 }
