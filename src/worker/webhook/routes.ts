@@ -3,7 +3,7 @@
 
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
-import { ownerAthleteId } from "../owner";
+import { ownerAthleteId, parseConfiguredId } from "../owner";
 import { processWebhookAction } from "./process";
 import {
   checkSubscriptionRequest,
@@ -62,6 +62,7 @@ webhookRoutes.post("/", async (c) => {
   const action = decideWebhookAction(
     parseWebhookEvent(await readJsonBody(c.req.raw)),
     ownerAthleteId(c.env.OWNER_ATHLETE_ID),
+    parseConfiguredId(c.env.STRAVA_WEBHOOK_SUBSCRIPTION_ID),
   );
   if (action.kind !== "ignore") {
     c.executionCtx.waitUntil(processWebhookAction(c.env, action, Date.now()));

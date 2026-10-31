@@ -15,6 +15,7 @@ export type WebhookEvent = {
   aspectType: (typeof ASPECT_TYPES)[number];
   objectId: number;
   ownerId: number;
+  subscriptionId: number;
   deauthorized: boolean;
 };
 
@@ -43,11 +44,18 @@ function oneOf<T extends string>(
 export function parseWebhookEvent(body: unknown): WebhookEvent | null {
   if (typeof body !== "object" || body === null) return null;
   const event = body as Record<string, unknown>;
-  const { object_type, aspect_type, object_id, owner_id } = event;
+  const { object_type, aspect_type, object_id, owner_id, subscription_id } =
+    event;
   if (!oneOf(OBJECT_TYPES, object_type) || !oneOf(ASPECT_TYPES, aspect_type)) {
     return null;
   }
-  if (!isPositiveId(object_id) || !isPositiveId(owner_id)) return null;
+  if (
+    !isPositiveId(object_id) ||
+    !isPositiveId(owner_id) ||
+    !isPositiveId(subscription_id)
+  ) {
+    return null;
+  }
   const updates = event.updates;
   const authorized =
     typeof updates === "object" && updates !== null
@@ -58,17 +66,23 @@ export function parseWebhookEvent(body: unknown): WebhookEvent | null {
     aspectType: aspect_type,
     objectId: object_id,
     ownerId: owner_id,
+    subscriptionId: subscription_id,
     // Strava envoie la chaîne "false" ; le booléen est accepté par prudence.
     deauthorized: authorized === "false" || authorized === false,
   };
 }
 
-// Seuls les événements du propriétaire sont traités ; sans propriétaire configuré, rien ne l'est.
+// Seuls les événements du propriétaire, venus de notre abonnement, sont traités ; sans
+// propriétaire ou sans id d'abonnement configuré, rien ne l'est (fail closed).
 export function decideWebhookAction(
   event: WebhookEvent | null,
   ownerAthleteId: number | null,
+  subscriptionId: number | null,
 ): WebhookAction {
-  if (event === null || ownerAthleteId === null) return { kind: "ignore" };
+  if (event === null || ownerAthleteId === null || subscriptionId === null) {
+    return { kind: "ignore" };
+  }
+  if (event.subscriptionId !== subscriptionId) return { kind: "ignore" };
   if (event.ownerId !== ownerAthleteId) return { kind: "ignore" };
   const athleteId = ownerAthleteId;
   if (event.objectType === "athlete") {

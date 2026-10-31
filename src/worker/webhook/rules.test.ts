@@ -26,6 +26,7 @@ describe("parseWebhookEvent", () => {
       aspectType: "create",
       objectId: 1001,
       ownerId: OWNER,
+      subscriptionId: 7,
       deauthorized: false,
     });
   });
@@ -36,6 +37,7 @@ describe("parseWebhookEvent", () => {
   ])("detects a deauthorization sent as %s", (_label, authorized) => {
     const event = parseWebhookEvent({
       object_type: "athlete",
+      subscription_id: 7,
       object_id: OWNER,
       aspect_type: "update",
       owner_id: OWNER,
@@ -55,6 +57,14 @@ describe("parseWebhookEvent", () => {
     ["an unknown aspect type", activityEvent("rename")],
     ["a string object id", { ...activityEvent("create"), object_id: "1001" }],
     ["a negative owner id", { ...activityEvent("create"), owner_id: -1 }],
+    [
+      "a missing subscription id",
+      { ...activityEvent("create"), subscription_id: undefined },
+    ],
+    [
+      "a string subscription id",
+      { ...activityEvent("create"), subscription_id: "7" },
+    ],
     ["a missing owner id", { ...activityEvent("create"), owner_id: undefined }],
     ["a string owner id", { ...activityEvent("create"), owner_id: "42" }],
     ["a decimal object id", { ...activityEvent("create"), object_id: 1.5 }],
@@ -71,6 +81,7 @@ describe("parseWebhookEvent", () => {
 describe("parseWebhookEvent authorized flag", () => {
   const athleteEvent = (updates: unknown) => ({
     object_type: "athlete",
+    subscription_id: 7,
     object_id: OWNER,
     aspect_type: "update",
     owner_id: OWNER,
@@ -91,8 +102,23 @@ describe("parseWebhookEvent authorized flag", () => {
 });
 
 describe("decideWebhookAction", () => {
-  const decide = (body: unknown, owner: number | null = OWNER) =>
-    decideWebhookAction(parseWebhookEvent(body), owner);
+  const decide = (
+    body: unknown,
+    owner: number | null = OWNER,
+    subscription: number | null = 7,
+  ) => decideWebhookAction(parseWebhookEvent(body), owner, subscription);
+
+  it("ignores events from another subscription", () => {
+    expect(decide(activityEvent("create"), OWNER, 8)).toEqual({
+      kind: "ignore",
+    });
+  });
+
+  it("ignores everything when no subscription id is configured", () => {
+    expect(decide(activityEvent("create"), OWNER, null)).toEqual({
+      kind: "ignore",
+    });
+  });
 
   it.each(["create", "update"])("refreshes the activity on %s", (aspect) => {
     expect(decide(activityEvent(aspect))).toEqual({
@@ -114,6 +140,7 @@ describe("decideWebhookAction", () => {
     expect(
       decide({
         object_type: "athlete",
+        subscription_id: 7,
         object_id: OWNER,
         aspect_type: "update",
         owner_id: OWNER,
@@ -126,6 +153,7 @@ describe("decideWebhookAction", () => {
     expect(
       decide({
         object_type: "athlete",
+        subscription_id: 7,
         object_id: OWNER,
         aspect_type: "update",
         owner_id: OWNER,

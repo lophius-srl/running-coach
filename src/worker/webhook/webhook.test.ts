@@ -27,6 +27,7 @@ const testEnv: Bindings = {
   STRAVA_WEBHOOK_VERIFY_TOKEN: VERIFY_TOKEN,
   SESSION_SECRET: "session-secret",
   OWNER_ATHLETE_ID: String(OWNER),
+  STRAVA_WEBHOOK_SUBSCRIPTION_ID: "1",
 };
 
 beforeAll(async () => {
@@ -567,6 +568,53 @@ describe("POST /api/strava/webhook (ignored bodies and deferred work)", () => {
     expect(waitUntil).not.toHaveBeenCalled();
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(await count("oauth_tokens", 1)).toBe(1);
+  });
+
+  it.each([
+    ["not configured", undefined],
+    ["empty", ""],
+    ["different from the event's", "2"],
+  ])(
+    "ignores the event when STRAVA_WEBHOOK_SUBSCRIPTION_ID is %s",
+    async (_label, subscriptionId) => {
+      const fetchSpy = mockStrava({});
+
+      const { response, waitUntil } = await postWith(deauthorization(), {
+        ...testEnv,
+        STRAVA_WEBHOOK_SUBSCRIPTION_ID: subscriptionId,
+      });
+
+      expect(response.status).toBe(200);
+      expect(waitUntil).not.toHaveBeenCalled();
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(await count("oauth_tokens", 1)).toBe(1);
+    },
+  );
+
+  it("ignores an event without subscription_id", async () => {
+    const { waitUntil } = await postWith({
+      ...deauthorization(),
+      subscription_id: undefined,
+    });
+
+    expect(waitUntil).not.toHaveBeenCalled();
+    expect(await count("oauth_tokens", 1)).toBe(1);
+  });
+
+  it("still validates the subscription (GET) without a subscription id", async () => {
+    const query = new URLSearchParams({
+      "hub.mode": "subscribe",
+      "hub.challenge": "abc",
+      "hub.verify_token": VERIFY_TOKEN,
+    });
+    const response = await app.request(
+      `/api/strava/webhook?${query}`,
+      {},
+      { ...testEnv, STRAVA_WEBHOOK_SUBSCRIPTION_ID: undefined },
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ "hub.challenge": "abc" });
   });
 
   it("does not schedule work for another athlete's event", async () => {
