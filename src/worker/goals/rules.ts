@@ -55,9 +55,18 @@ export function parseDuration(text: string): number | null {
   return Number(hours ?? 0) * 3600 + minutes * 60 + Number(seconds);
 }
 
-// Date calendaire UTC (AAAA-MM-JJ) d'un instant.
-export function utcIsoDate(nowMs: number): string {
-  return new Date(nowMs).toISOString().slice(0, 10);
+// Fuseau de l'utilisateur (app mono-utilisateur, propriétaire en France) : « aujourd'hui »
+// pour la validation de l'objectif et le plan de la semaine.
+export const APP_TIME_ZONE = "Europe/Paris";
+
+// Date calendaire (AAAA-MM-JJ) d'un instant dans un fuseau ; « en-CA » formate en AAAA-MM-JJ.
+export function localIsoDate(nowMs: number, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(nowMs);
 }
 
 function isIsoDate(value: unknown): value is string {
@@ -116,8 +125,8 @@ export function validateGoal(input: unknown, today: string): GoalValidation {
   const distance = raceDistance(raw.distanceM);
   if (!distance) errors.distanceM = "Choisis une distance cible.";
 
-  // Fuseau : le serveur passe la date UTC, le front sa date locale (au moins aussi stricte
-  // en France). Seule la validation serveur fait foi ; celle du front sert à l'affichage.
+  // Fuseau : le serveur passe la date du jour à Paris (APP_TIME_ZONE), le front sa date locale
+  // (identique en France). Seule la validation serveur fait foi ; celle du front sert à l'affichage.
   if (!isIsoDate(raw.raceDate)) {
     errors.raceDate = "Saisis une date de course valide.";
   } else if (raw.raceDate <= today) {

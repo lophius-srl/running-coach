@@ -4,7 +4,8 @@ import type { Fitness } from "../../core/fitness";
 import { trainingPaces } from "../../core/paces";
 import { loadFitness } from "./fitness";
 import {
-  utcIsoDate,
+  APP_TIME_ZONE,
+  localIsoDate,
   validateGoal,
   type Goal,
   type GoalResponse,
@@ -12,14 +13,14 @@ import {
 
 // Les colonnes reference_distance_m / reference_time_s restent en base (migrations additives,
 // ADR 0002) mais ne sont plus lues ni écrites depuis #46.
-type GoalRow = {
+export type GoalRow = {
   distance_m: number;
   race_date: string;
   target_time_s: number | null;
   available_days: string;
 };
 
-function toGoal(row: GoalRow): Goal {
+export function toGoal(row: GoalRow): Goal {
   const days: unknown = JSON.parse(row.available_days);
   return {
     distanceM: row.distance_m,
@@ -73,7 +74,7 @@ goalRoutes.get("/", async (c) => {
 goalRoutes.put("/", async (c) => {
   const body: unknown = await c.req.json().catch(() => null);
   const nowMs = Date.now();
-  const result = validateGoal(body, utcIsoDate(nowMs));
+  const result = validateGoal(body, localIsoDate(nowMs, APP_TIME_ZONE));
   if (!result.ok) return c.json({ errors: result.errors }, 400);
 
   const { goal } = result;

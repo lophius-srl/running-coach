@@ -4,6 +4,7 @@ import { authRoutes } from "./auth/routes";
 import { readSession } from "./auth/session";
 import { goalRoutes } from "./goals/routes";
 import { historyRoutes } from "./history/routes";
+import { planRoutes } from "./plans/routes";
 import type { AppEnv, Bindings } from "./env";
 import { StravaError } from "./strava/client";
 import { runDailySync, runSync } from "./sync/sync";
@@ -34,6 +35,7 @@ app.use("/api/*", async (c, next) => {
 app.route("/api/auth", authRoutes);
 app.route("/api/goal", goalRoutes);
 app.route("/api/history", historyRoutes);
+app.route("/api/plan", planRoutes);
 
 app.get("/api/me", async (c) => {
   const user = await c.env.DB.prepare(
