@@ -64,15 +64,63 @@ async function saveGoal(userId: number, raceDate = goal.raceDate) {
     .run();
 }
 
-// Course importée il y a 13 jours : base du niveau (VDOT) et donc des allures.
-async function importRun(userId: number, id: number, movingTimeS: number) {
+// Course importée il y a 3 jours (13 jours avec `startDate`) : base du niveau (VDOT) et donc
+// des allures ; dans les 7 derniers jours, elle évite la reprise en douceur (#16).
+async function importRun(
+  userId: number,
+  id: number,
+  movingTimeS: number,
+  startDate = "2026-10-30T07:00:00.000Z",
+) {
   await env.DB.prepare(
     `INSERT INTO imported_activities (user_id, id, start_date, sport_type, distance_m, moving_time_s)
-     VALUES (?, ?, '2026-10-20T07:00:00.000Z', 'Run', 5000, ?)`,
+     VALUES (?, ?, ?, 'Run', 5000, ?)`,
   )
-    .bind(userId, id, movingTimeS)
+    .bind(userId, id, startDate, movingTimeS)
     .run();
 }
+
+// Activité Strava API (purgée à 7 jours) partie hier.
+async function syncRun(userId: number, id: number, movingTimeS: number) {
+  const payload = {
+    id,
+    sport_type: "Run",
+    start_date: "2026-11-01T07:00:00.000Z",
+    distance: 30000,
+    moving_time: movingTimeS,
+  };
+  await env.DB.prepare(
+    "INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (?, ?, ?, '2026-11-01T08:00:00.000Z')",
+  )
+    .bind(id, userId, JSON.stringify(payload))
+    .run();
+}
+
+async function snapshot() {
+  const { results } = await env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name",
+  ).all<{ name: string }>();
+  const tables: Record<string, unknown[]> = {};
+  for (const { name } of results) {
+    tables[name] = (
+      await env.DB.prepare(`SELECT * FROM "${name}"`).all()
+    ).results;
+  }
+  return tables;
+}
+
+const storedSessions = async () =>
+  (
+    await env.DB.prepare(
+      "SELECT kind, duration_min FROM plan_sessions ORDER BY scheduled_date",
+    ).all()
+  ).results;
+
+const BASE_SESSIONS = [
+  { kind: "vma", duration_min: 50 },
+  { kind: "endurance", duration_min: 45 },
+  { kind: "long", duration_min: 75 },
+];
 
 const pacesFor = (movingTimeS: number) =>
   trainingPaces({ ...goal, vdot: vdot(5000, movingTimeS) });
@@ -241,6 +289,7 @@ describe("/api/plan", () => {
       weekStart: "2026-11-02",
       phase: "taper",
       sessions: [],
+      adjustment: null,
     });
     expect(await (await callPlan(1)).json()).toEqual({ plan });
   });
@@ -314,5 +363,76 @@ describe("/api/plan", () => {
         durationMin: 25,
       }),
     ]);
+  });
+
+  describe("adjustment to recent runs (#16)", () => {
+    it("does not adjust when the recent volume matches the plan", async () => {
+      await saveGoal(1);
+      await importRun(1, 1, 1380);
+      const { plan } = await (await callPlan(1, "POST")).json<PlanResponse>();
+      expect(plan?.adjustment).toBeNull();
+      expect(plan?.sessions.map((s) => s.planned)).toEqual([null, null, null]);
+    });
+
+    it("reduces the week after a much higher volume, on POST and GET", async () => {
+      await saveGoal(1);
+      await importRun(1, 1, 1380); // 23 min
+      await syncRun(1, 10, 200 * 60); // 223 min > 170 × 1,3
+      const { plan } = await (await callPlan(1, "POST")).json<PlanResponse>();
+      expect(plan?.adjustment).toEqual({
+        kind: "high_volume",
+        reason: expect.stringMatching(
+          /^Volume récent élevé \(223 min .* −15 %\.$/,
+        ),
+      });
+      expect(plan?.sessions).toMatchObject([
+        { kind: "vma", durationMin: 50, planned: null },
+        { kind: "endurance", durationMin: 40, planned: { durationMin: 45 } },
+        { kind: "long", durationMin: 65, planned: { durationMin: 75 } },
+      ]);
+      expect(await (await callPlan(1)).json()).toEqual({ plan });
+      expect(await storedSessions()).toEqual(BASE_SESSIONS);
+    });
+
+    it("restarts gently after 7 days without running, with matching paces", async () => {
+      await saveGoal(1);
+      await importRun(1, 1, 1380, "2026-10-20T07:00:00.000Z");
+      const { plan } = await (await callPlan(1, "POST")).json<PlanResponse>();
+      expect(plan?.adjustment?.kind).toBe("restart");
+      expect(plan?.sessions[0]).toMatchObject({
+        kind: "endurance",
+        durationMin: 35,
+        targetPace: pacesFor(1380).endurance,
+        planned: { kind: "vma", durationMin: 50 },
+      });
+      expect(await storedSessions()).toEqual(BASE_SESSIONS);
+    });
+
+    it("recomputes the adjustment on each read", async () => {
+      await saveGoal(1);
+      await importRun(1, 1, 1380);
+      await callPlan(1, "POST");
+      await syncRun(1, 10, 300 * 60);
+      const high = await (await callPlan(1)).json<PlanResponse>();
+      expect(high.plan?.adjustment?.reason).toMatch(/−25 %/);
+
+      await env.DB.prepare("DELETE FROM strava_activities").run();
+      const back = await (await callPlan(1)).json<PlanResponse>();
+      expect(back.plan?.adjustment).toBeNull();
+    });
+
+    it("stores neither the adjusted durations nor the reason", async () => {
+      await saveGoal(1);
+      await importRun(1, 1, 1380);
+      await syncRun(1, 10, 300 * 60);
+      await callPlan(1, "POST");
+      const before = await snapshot();
+
+      await callPlan(1);
+      expect(await snapshot()).toEqual(before);
+      const stored = JSON.stringify([before.plans, before.plan_sessions]);
+      expect(stored).not.toMatch(/volume|reprise|planned|adjust/i);
+      expect(await storedSessions()).toEqual(BASE_SESSIONS);
+    });
   });
 });

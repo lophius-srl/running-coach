@@ -1,17 +1,14 @@
 // Réponse de GET et POST /api/plan, partagée par l'API et le front (sans type Cloudflare).
 
 import type { PaceRange, TrainingPaces } from "../../core/paces";
-import {
-  SESSION_ZONE,
-  type PlannedSession,
-  type WeekPlan,
-} from "../../core/plan";
+import { SESSION_ZONE } from "../../core/plan";
+import type { AdjustedPlan, AdjustedSession } from "../../core/plan-adjust";
 
-export type PlanSessionView = PlannedSession & {
+export type PlanSessionView = AdjustedSession & {
   targetPace: PaceRange | null; // null sans allures (aucune course exploitable)
 };
 
-export type PlanView = Omit<WeekPlan, "sessions"> & {
+export type PlanView = Omit<AdjustedPlan, "sessions"> & {
   sessions: PlanSessionView[];
 };
 
@@ -21,10 +18,10 @@ export type PlanResponse = { plan: PlanView | null };
 // passée.
 export type PlanError = "no_goal" | "no_days" | "no_paces" | "race_passed";
 
-// Allures cibles ajoutées à la lecture, depuis les allures du moment : elles dérivent des
-// activités Strava et ne sont donc jamais stockées avec le plan (ADR 0003).
+// Allures cibles et ajustement (src/core/plan-adjust) ajoutés à la lecture : ils dérivent des
+// activités Strava et ne sont donc jamais stockés avec le plan (ADR 0003).
 export function withTargetPaces(
-  plan: WeekPlan,
+  plan: AdjustedPlan,
   paces: TrainingPaces | null,
 ): PlanView {
   return {
