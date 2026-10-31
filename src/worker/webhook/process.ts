@@ -46,7 +46,11 @@ async function syncActivity(
   payload: unknown,
   nowMs: number,
 ): Promise<void> {
-  const decision = decideActivity(payload, activityId, athleteId, nowMs);
+  // null : Strava ne sert plus l'activité (404), on retire la copie locale.
+  const decision =
+    payload === null
+      ? { kind: "remove" as const }
+      : decideActivity(payload, activityId, athleteId, nowMs);
   if (decision.kind === "invalid") {
     throw new StravaError("Strava activity: unexpected response");
   }

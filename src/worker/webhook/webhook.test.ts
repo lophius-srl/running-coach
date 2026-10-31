@@ -242,6 +242,24 @@ describe("POST /api/strava/webhook (activity events)", () => {
     expect((await activities()).map((a) => a.id)).toEqual([11, 20]);
   });
 
+  it("removes a stored activity that Strava no longer serves on update", async () => {
+    mockStrava({});
+
+    await deliver(activityEvent("update", 10));
+
+    expect((await activities()).map((a) => a.id)).toEqual([11, 20]);
+  });
+
+  it("keeps stored data when Strava fails on update", async () => {
+    mockStrava({
+      "/api/v3/activities/10": () => new Response("{}", { status: 500 }),
+    });
+
+    await expect(deliver(activityEvent("update", 10))).rejects.toThrow();
+
+    expect((await activities()).map((a) => a.id)).toEqual([10, 11, 20]);
+  });
+
   it("does not store an old run on create", async () => {
     mockStrava({
       "/api/v3/activities/12": () =>
