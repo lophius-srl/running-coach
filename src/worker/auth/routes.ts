@@ -19,7 +19,7 @@ const stateCookieOptions = {
 } as const;
 
 // Fail closed : sans OWNER_ATHLETE_ID valide, aucune connexion n'est possible.
-function ownerAthleteId(raw: string | undefined): number | null {
+export function ownerAthleteId(raw: string | undefined): number | null {
   const value = raw?.trim() ?? "";
   return /^\d+$/.test(value) ? Number(value) : null;
 }

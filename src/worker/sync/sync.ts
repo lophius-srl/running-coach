@@ -4,6 +4,7 @@
 import type { Bindings } from "../env";
 import { stravaApiFetch, StravaError } from "../strava/client";
 import { partitionActivities, purgeCutoff, syncWindowStart } from "./rules";
+import { deleteActivity, upsertActivity } from "./store";
 
 const PER_PAGE = 100;
 // Garde-fou : 7 jours tiennent largement dans une page ; borne le temps CPU et les appels.
@@ -60,19 +61,9 @@ export async function syncUserActivities(
   const fetchedAt = new Date(nowMs).toISOString();
   const db = env.DB;
   const upserts = runs.map((activity) =>
-    db
-      .prepare(
-        `INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (?, ?, ?, ?)
-           ON CONFLICT (id) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at
-           WHERE strava_activities.user_id = excluded.user_id`,
-      )
-      .bind(activity.id, userId, JSON.stringify(activity), fetchedAt),
+    upsertActivity(db, userId, activity, fetchedAt),
   );
-  const deletions = otherIds.map((id) =>
-    db
-      .prepare("DELETE FROM strava_activities WHERE id = ? AND user_id = ?")
-      .bind(id, userId),
-  );
+  const deletions = otherIds.map((id) => deleteActivity(db, userId, id));
   if (upserts.length + deletions.length === 0) return { imported: 0 };
   const results = await db.batch([...upserts, ...deletions]);
   // L'upsert gardé par user_id n'écrit rien sur l'activité d'un autre utilisateur.
