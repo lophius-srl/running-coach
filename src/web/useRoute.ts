@@ -18,6 +18,12 @@ export function useRoute(): ViewId {
   const [view, setView] = useState<ViewId>(currentView);
 
   useEffect(() => {
+    // Chemin inconnu ou non canonique (/foo, /objectif/) : l'URL affichée devient celle de la vue.
+    const { pathname, search, hash } = window.location;
+    const canonical = routeFor(viewForPath(pathname)).path;
+    if (pathname !== canonical) {
+      window.history.replaceState(null, "", canonical + search + hash);
+    }
     const onPopState = () => setView(currentView());
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
