@@ -4,7 +4,7 @@ import { RouteLink } from "./AppNav";
 import { formatPaceRange } from "./format";
 import { MissingPaces, ZONES } from "./Paces";
 import { RecentRuns } from "./RecentRuns";
-import { Alert, Loading } from "./ui";
+import { Alert, ConnectWithStrava, Loading } from "./ui";
 import type { GoalState } from "./useGoal";
 import type { SyncState } from "./useSync";
 import { WeekPlan } from "./WeekPlan";
@@ -118,6 +118,12 @@ export function WeekView({ athleteId, goal, sync, syncCount, onSync }: Props) {
       </div>
       {sync.status === "failed" && (
         <Alert message="Échec de la synchronisation, réessaie plus tard." />
+      )}
+      {sync.status === "revoked" && (
+        <>
+          <Alert message="Ta connexion Strava a été révoquée : reconnecte-toi." />
+          <ConnectWithStrava />
+        </>
       )}
       <div className="view-grid view-grid-aside">
         <div className="view-stack">

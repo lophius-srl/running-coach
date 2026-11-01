@@ -487,6 +487,8 @@ describe("session guard bypass attempts", () => {
     "/api/strava/webhooks",
     "/api/strava/webhook-admin",
     "/api/strava/webhookx/me",
+    "/api/strava/webhook/",
+    "/api/strava/webhook/admin",
   ])("answers 401 without session on %s", async (path) => {
     const response = await request(path);
     expect(response.status).toBe(401);

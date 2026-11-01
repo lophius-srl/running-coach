@@ -4,7 +4,7 @@ import { GoalView } from "./GoalView";
 import { HistoryImport } from "./HistoryImport";
 import { Layout } from "./Layout";
 import { APP_NAME, documentTitle, routeFor } from "./routes";
-import { Loading } from "./ui";
+import { ConnectWithStrava, Loading } from "./ui";
 import { useGoal } from "./useGoal";
 import { useRoute } from "./useRoute";
 import { useSync } from "./useSync";
@@ -20,20 +20,6 @@ async function fetchSession(): Promise<Session> {
   if (!response.ok) return { status: "anonymous" };
   const { athleteId } = (await response.json()) as { athleteId: number };
   return { status: "connected", athleteId };
-}
-
-// Bouton officiel du kit de marque Strava (https://developers.strava.com/guidelines/), non modifié.
-function ConnectWithStrava() {
-  return (
-    <a className="strava-connect" href="/api/auth/strava">
-      <img
-        src="/strava/btn_strava_connect_with_orange.svg"
-        width={237}
-        height={48}
-        alt="Connect with Strava"
-      />
-    </a>
-  );
 }
 
 type ConnectedProps = { athleteId: number; onLogout: () => void };

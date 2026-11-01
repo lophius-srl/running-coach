@@ -17,7 +17,7 @@ import {
 import { generateSignedCookie } from "hono/cookie";
 import worker, { app } from "../index";
 import type { Bindings } from "../env";
-import { StravaError } from "../strava/client";
+import { StravaError, StravaReauthorizationRequired } from "../strava/client";
 import { resetDatabase } from "../test-db";
 import {
   purgeExpiredActivities,
@@ -82,6 +82,15 @@ function insertActivity(id: number, userId: number, fetchedAt: string) {
   )
     .bind(id, userId, fetchedAt)
     .run();
+}
+
+async function tokenCount(userId: number) {
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM oauth_tokens WHERE user_id = ?",
+  )
+    .bind(userId)
+    .first<{ n: number }>();
+  return row?.n;
 }
 
 async function storedActivities() {
@@ -276,7 +285,7 @@ describe("syncUserActivities", () => {
     expect((await storedActivities()).map((a) => a.id)).toEqual([10]);
   });
 
-  it("throws a StravaError and keeps stored data when the token refresh fails", async () => {
+  it("deletes tokens and activities when the token refresh is refused", async () => {
     await env.DB.prepare(
       "UPDATE oauth_tokens SET expires_at = 0 WHERE user_id = 1",
     ).run();
@@ -286,9 +295,24 @@ describe("syncUserActivities", () => {
     );
 
     await expect(syncUserActivities(testEnv, 1, NOW_MS)).rejects.toBeInstanceOf(
-      StravaError,
+      StravaReauthorizationRequired,
     );
-    expect(await storedActivities()).toHaveLength(1);
+    expect(await storedActivities()).toEqual([]);
+    expect(await tokenCount(1)).toBe(0);
+  });
+
+  it("deletes tokens and activities when the API answers 401", async () => {
+    await insertActivity(10, 1, "2026-10-29T04:00:00.000Z");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("{}", { status: 401 }),
+    );
+
+    await expect(syncUserActivities(testEnv, 1, NOW_MS)).rejects.toBeInstanceOf(
+      StravaReauthorizationRequired,
+    );
+    expect(await storedActivities()).toEqual([]);
+    expect(await tokenCount(1)).toBe(0);
+    expect(await tokenCount(2)).toBe(1);
   });
 
   it("keeps stored data and throws a StravaError when Strava fails", async () => {
@@ -348,6 +372,20 @@ describe("runDailySync", () => {
       StravaError,
     );
     expect((await storedActivities()).map((a) => a.id)).toEqual([20]);
+  });
+
+  it("deletes a revoked user's data without failing the run", async () => {
+    await insertActivity(1, 1, "2026-10-29T04:00:00.000Z");
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) =>
+      tokenOf(init) === "Bearer token-1"
+        ? new Response("{}", { status: 401 })
+        : Response.json([run(20)]),
+    );
+
+    await runDailySync(testEnv, NOW_MS);
+
+    expect((await storedActivities()).map((a) => a.id)).toEqual([20]);
+    expect(await tokenCount(1)).toBe(0);
   });
 
   it("only purges when no user is connected", async () => {
@@ -440,6 +478,28 @@ describe("POST /api/sync", () => {
 
     expect(response.status).toBe(404);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  const revokeTokens = async () => {
+    await env.DB.prepare("DELETE FROM oauth_tokens WHERE user_id = 1").run();
+  };
+
+  it.each([
+    ["the API answers 401", 401, async () => {}],
+    ["the tokens are gone", 200, revokeTokens],
+  ])("asks for a reauthorization when %s", async (_label, status, setup) => {
+    await setup();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+      Response.json([], { status }),
+    );
+
+    const response = await postSync({ Cookie: await sessionCookie(1) });
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      error: "strava_reauthorization_required",
+    });
+    expect(await tokenCount(1)).toBe(0);
   });
 
   it("answers 502 when Strava is unreachable", async () => {

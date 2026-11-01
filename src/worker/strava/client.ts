@@ -1,6 +1,8 @@
 // Client Strava : échange du code OAuth, rafraîchissement transparent des tokens.
 // Ne jamais journaliser les tokens.
 
+import { deleteStravaData } from "./revocation";
+
 const TOKEN_URL = "https://www.strava.com/oauth/token";
 const DEAUTHORIZE_URL = "https://www.strava.com/oauth/deauthorize";
 const API_BASE_URL = "https://www.strava.com/api/v3";
@@ -21,7 +23,23 @@ export type StravaTokens = {
 
 export type AuthorizationResult = StravaTokens & { athlete: { id: number } };
 
-export class StravaError extends Error {}
+export class StravaError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+  }
+}
+
+// Accès révoqué ou refusé par Strava : tokens et activités ont déjà été supprimés,
+// l'utilisateur doit se reconnecter.
+export class StravaReauthorizationRequired extends StravaError {}
+
+async function revokeAccess(db: D1Database, userId: number): Promise<never> {
+  await deleteStravaData(db, userId);
+  throw new StravaReauthorizationRequired("Strava access revoked");
+}
 
 async function postToken(
   credentials: StravaCredentials,
@@ -41,7 +59,10 @@ async function postToken(
     throw new StravaError("Strava token endpoint: unreachable");
   }
   if (!response.ok) {
-    throw new StravaError(`Strava token endpoint: HTTP ${response.status}`);
+    throw new StravaError(
+      `Strava token endpoint: HTTP ${response.status}`,
+      response.status,
+    );
   }
   try {
     return await response.json();
@@ -118,13 +139,24 @@ export async function getValidAccessToken(
     )
     .bind(userId)
     .first<StravaTokens>();
-  if (!stored) throw new StravaError("No Strava tokens for this user");
+  if (!stored) return revokeAccess(db, userId);
 
   if (stored.expires_at - Math.floor(now / 1000) > REFRESH_MARGIN_SECONDS) {
     return stored.access_token;
   }
 
-  const fresh = await refreshTokens(credentials, stored.refresh_token);
+  // 400/401 au refresh : refresh token révoqué ou invalide (désautorisation).
+  const fresh = await refreshTokens(credentials, stored.refresh_token).catch(
+    (err: unknown) => {
+      if (
+        err instanceof StravaError &&
+        (err.status === 400 || err.status === 401)
+      ) {
+        return revokeAccess(db, userId);
+      }
+      throw err;
+    },
+  );
   await db
     .prepare(
       "UPDATE oauth_tokens SET access_token = ?, refresh_token = ?, expires_at = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE user_id = ?",
@@ -142,11 +174,14 @@ export async function stravaApiFetch(
   path: string,
 ): Promise<Response> {
   const accessToken = await getValidAccessToken(db, credentials, userId);
+  let response: Response;
   try {
-    return await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(`${API_BASE_URL}${path}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
   } catch {
     throw new StravaError("Strava API: unreachable");
   }
+  if (response.status === 401) return revokeAccess(db, userId);
+  return response;
 }
