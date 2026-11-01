@@ -660,10 +660,8 @@ describe("POST /api/strava/webhook (ignored bodies and deferred work)", () => {
   it("accepts a valid event padded up to exactly 4 KiB", async () => {
     mockStrava({});
     const event = JSON.stringify(activityEvent("delete", 10));
-    const body = event.replace(
-      "{",
-      `{"pad":"${"x".repeat(4096 - event.length - 9)}",`,
-    );
+    // Champ `pad` inséré en tête de l'objet JSON (après l'accolade ouvrante).
+    const body = `{"pad":"${"x".repeat(4096 - event.length - 9)}",${event.slice(1)}`;
     expect(body.length).toBe(4096);
 
     const { waitUntil } = await postRaw(body);
