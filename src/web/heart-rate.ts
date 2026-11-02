@@ -3,6 +3,7 @@
 import {
   HEART_RATE_ZONES,
   karvonenZones,
+  MIN_KARVONEN_RESERVE,
   validateHeartRate,
   type HeartRateErrors,
   type HeartRateSettings,
@@ -63,6 +64,14 @@ export function computeZones(
   }
   if (!result.ok && result.errors.maxHr) errors.maxHr = result.errors.maxHr;
   if (errors.restingHr || errors.maxHr) return { errors };
+  if (maxHr - restingHr < MIN_KARVONEN_RESERVE) {
+    return {
+      errors: {
+        maxHr:
+          "L'écart entre FC repos et FC max est trop faible pour calculer des zones.",
+      },
+    };
+  }
   const { zones } = toHeartRateForm({
     restingHr,
     maxHr,

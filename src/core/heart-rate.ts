@@ -42,6 +42,8 @@ export const MAX_HR = { min: 120, max: 230 };
 // Z1 récupération 50–60 %, Z2 endurance 60–70 %, Z3 tempo 70–80 %, Z4 seuil 80–90 %,
 // Z5 VMA 90–100 %.
 export const KARVONEN_PERCENTS = [50, 60, 70, 80, 90, 100] as const;
+// En dessous de 10 bpm de réserve, l'arrondi au bpm donne des zones vides : pas de calcul.
+export const MIN_KARVONEN_RESERVE = 10;
 
 export const HEART_RATE_ZONES = [
   { label: "Z1", name: "Récupération" },

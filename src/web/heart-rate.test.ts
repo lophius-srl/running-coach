@@ -72,6 +72,32 @@ describe("computeZones", () => {
   });
 });
 
+describe("computeZones with a small heart rate reserve", () => {
+  const compute = (restingHr: string, maxHr: string) =>
+    computeZones({ ...EMPTY_HEART_RATE_FORM, restingHr, maxHr });
+
+  it("refuses to compute below 10 bpm of reserve", () => {
+    for (const [rest, max] of [
+      ["119", "121"],
+      ["111", "120"],
+    ]) {
+      expect(compute(rest, max)).toEqual({
+        errors: {
+          maxHr:
+            "L'écart entre FC repos et FC max est trop faible pour calculer des zones.",
+        },
+      });
+    }
+  });
+
+  it("computes valid zones from 10 bpm of reserve", () => {
+    const result = compute("110", "120");
+    expect(
+      "form" in result && validateHeartRate(toHeartRateInput(result.form)).ok,
+    ).toBe(true);
+  });
+});
+
 describe("formatHeartRateTarget", () => {
   it("shows the zone and its bounds", () => {
     expect(formatHeartRateTarget({ zone: 2, low: 128, high: 141 })).toBe(
