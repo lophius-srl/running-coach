@@ -56,6 +56,7 @@ describe("parseRun", () => {
       id: 1,
       name: "Footing",
       startDate: "2026-10-29T06:00:00Z",
+      startDateLocal: null,
       sportType: "TrailRun",
       surface: "trail",
       workout: "race",
@@ -140,6 +141,36 @@ describe("parseRun", () => {
       parseRun(payload({ pr_count: 1.5, max_speed: 0, average_cadence: 0 })),
     ).toMatchObject({ prCount: null, maxPaceSPerKm: null, cadenceSpm: null });
   });
+
+  it.each([
+    ["slower than the average pace", 3],
+    ["more than 3 times the average speed", 10.1],
+  ])("ignores a max speed %s", (_label, maxSpeed) => {
+    // Vitesse moyenne : 10 km en 3 000 s = 3,33 m/s.
+    expect(
+      parseRun(payload({ max_speed: maxSpeed }))?.maxPaceSPerKm,
+    ).toBeNull();
+  });
+
+  it("keeps a max speed up to 3 times the average speed", () => {
+    expect(parseRun(payload({ max_speed: 10 }))?.maxPaceSPerKm).toBe(100);
+  });
+
+  it("keeps the local start time Strava sends with a fake Z suffix", () => {
+    expect(
+      parseRun(payload({ start_date_local: "2026-10-29T07:00:00Z" }))
+        ?.startDateLocal,
+    ).toBe("2026-10-29T07:00:00Z");
+  });
+
+  it.each([undefined, "demain", 1730000000])(
+    "leaves the local start time empty when it is %o",
+    (local) => {
+      expect(
+        parseRun(payload({ start_date_local: local }))?.startDateLocal,
+      ).toBeNull();
+    },
+  );
 
   it("never reports a negative pause when the elapsed time is shorter", () => {
     expect(parseRun(payload({ elapsed_time: 2900 }))?.pauseS).toBe(0);
@@ -395,6 +426,25 @@ describe("summarizeRecentRuns insights", () => {
     ).runs;
 
     expect(run.paceZone).toBeNull();
+  });
+
+  it("gives no pace zone to intervals, whose mean pace mixes efforts and recoveries", () => {
+    const [run] = summarizeRecentRuns(
+      [payload({ sport_type: "Run", workout_type: 3, moving_time: 3300 })],
+      NOW_MS,
+      { vdot: 50, heartRateZones: null },
+    ).runs;
+
+    expect(run.paceZone).toBeNull();
+  });
+
+  it("gives no VDOT to a trail run", () => {
+    const [run] = summarizeRecentRuns(
+      [payload({ sport_type: "TrailRun", moving_time: 3300 })],
+      NOW_MS,
+    ).runs;
+
+    expect(run.vdot).toBeNull();
   });
 
   it("has no VDOT for a run too short or without a running sport type", () => {

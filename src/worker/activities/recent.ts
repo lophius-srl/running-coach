@@ -23,6 +23,9 @@ export type ParsedRun = {
   id: number;
   name: string;
   startDate: string; // ISO 8601, tel que renvoyé par Strava (start_date, UTC)
+  // Heure locale du départ (start_date_local) : Strava la suffixe d'un faux « Z », elle s'affiche
+  // donc en UTC. null si absente ou illisible.
+  startDateLocal: string | null;
   distanceM: number;
   movingTimeS: number;
   paceSPerKm: number | null; // null si la distance ou le temps est nul
@@ -34,7 +37,7 @@ export type ParsedRun = {
   workout: RunWorkout | null; // workout_type 1, 2, 3
   elapsedTimeS: number | null;
   pauseS: number | null; // elapsed_time − moving_time, jamais négatif
-  maxPaceSPerKm: number | null; // depuis max_speed (m/s)
+  maxPaceSPerKm: number | null; // depuis max_speed (m/s), écartée si incohérente
   maxHeartrate: number | null;
   cadenceSpm: number | null; // pas/min : Strava donne des foulées/min (× 2), arrondi
   elevLowM: number | null; // altitudes : valeurs non finies ou min > max rejetées
@@ -47,10 +50,10 @@ export type ParsedRun = {
 
 // Indicateurs calculés à la volée (src/core/run-insights.ts), jamais stockés (ADR 0003).
 export type RunInsights = {
-  paceZone: PaceZone | null; // selon le niveau actuel ; null en trail (allure faussée par le D+)
+  paceZone: PaceZone | null; // selon le niveau actuel ; null en trail et en fractionné
   heartRateZone: number | null; // 1 à 5, si les zones cardiaques sont définies
   metersPerBeat: number | null;
-  vdot: number | null; // si la sortie est exploitable (src/core/fitness.ts)
+  vdot: number | null; // si la sortie est exploitable (src/core/fitness.ts) ; null en trail
   weekShare: number | null; // part de la distance des 7 jours, 0 à 1
 };
 
@@ -108,6 +111,24 @@ function altitudeRange(elevLowM: number | null, elevHighM: number | null) {
     : { elevLowM, elevHighM };
 }
 
+// Pic de vitesse jugé aberrant (GPS) au-delà de 3 fois la vitesse moyenne.
+const MAX_SPEED_RATIO = 3;
+
+// Allure max depuis max_speed (m/s) ; null si absente, plus lente que l'allure moyenne ou
+// aberrante.
+function maxPace(
+  maxSpeed: number | null,
+  distanceM: number,
+  movingTimeS: number,
+) {
+  if (maxSpeed === null || distanceM <= 0 || movingTimeS <= 0) return null;
+  const averageSpeed = distanceM / movingTimeS;
+  if (maxSpeed < averageSpeed || maxSpeed > MAX_SPEED_RATIO * averageSpeed) {
+    return null;
+  }
+  return 1000 / maxSpeed;
+}
+
 export function paceSecondsPerKm(
   distanceM: number,
   movingTimeS: number,
@@ -135,13 +156,17 @@ export function parseRun(payload: string): ParsedRun | null {
   ) as string | undefined;
   const elevationGainM = nonNegative(raw.total_elevation_gain);
   const elapsedTimeS = nonNegative(raw.elapsed_time);
-  const maxSpeed = positive(raw.max_speed);
+  const { start_date_local: local } = raw;
   const cadence = positive(raw.average_cadence);
   const altitudes = altitudeRange(finite(raw.elev_low), finite(raw.elev_high));
   return {
     id: id as number,
     name: typeof name === "string" ? name : "",
     startDate: start_date,
+    startDateLocal:
+      typeof local === "string" && !Number.isNaN(Date.parse(local))
+        ? local
+        : null,
     sportType: sportType ?? "",
     surface: surface(sportType ?? "", raw.trainer),
     workout: WORKOUTS.get(raw.workout_type) ?? null,
@@ -151,7 +176,7 @@ export function parseRun(payload: string): ParsedRun | null {
     pauseS:
       elapsedTimeS === null ? null : Math.max(0, elapsedTimeS - moving_time),
     paceSPerKm: paceSecondsPerKm(distance, moving_time),
-    maxPaceSPerKm: maxSpeed === null ? null : 1000 / maxSpeed,
+    maxPaceSPerKm: maxPace(positive(raw.max_speed), distance, moving_time),
     averageHeartrate: positive(raw.average_heartrate),
     maxHeartrate: positive(raw.max_heartrate),
     cadenceSpm: cadence === null ? null : Math.round(cadence * 2),
@@ -171,16 +196,18 @@ function insights(
   context: RunContext,
   nowMs: number,
 ): RunInsights {
+  // En trail, le D+ fausse l'allure ; en fractionné, la moyenne mêle efforts et récupérations.
+  const paceIsMeaningful =
+    run.surface !== "trail" && run.workout !== "intervals";
   return {
-    paceZone:
-      run.surface === "trail" ? null : paceZone(run.paceSPerKm, context.vdot),
+    paceZone: paceIsMeaningful ? paceZone(run.paceSPerKm, context.vdot) : null,
     heartRateZone: heartRateZone(run.averageHeartrate, context.heartRateZones),
     metersPerBeat: metersPerBeat(
       run.distanceM,
       run.movingTimeS,
       run.averageHeartrate,
     ),
-    vdot: runVdot(run, nowMs),
+    vdot: run.surface === "trail" ? null : runVdot(run, nowMs),
     weekShare: weekShare(run.distanceM, weekDistanceM),
   };
 }

@@ -20,7 +20,7 @@ const UPSERT = `
     zones = excluded.zones,
     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
 
-// Zones enregistrées de l'utilisateur, ou null (aussi lu par le plan pour la zone cible).
+// Zones enregistrées et valides de l'utilisateur, ou null (aussi lu par le plan pour la zone cible).
 export async function loadHeartRate(
   db: D1Database,
   userId: number,
@@ -32,10 +32,16 @@ export async function loadHeartRate(
     .bind(userId)
     .first<HeartRateRow>();
   if (!row) return null;
+  let zones: unknown;
+  try {
+    zones = JSON.parse(row.zones);
+  } catch {
+    return null; // ligne corrompue : comme si rien n'était enregistré
+  }
   const result = validateHeartRate({
     restingHr: row.resting_hr,
     maxHr: row.max_hr,
-    zones: JSON.parse(row.zones) as unknown,
+    zones,
   });
   return result.ok ? result.settings : null;
 }
