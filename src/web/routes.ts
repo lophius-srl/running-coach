@@ -7,12 +7,18 @@ export type Route = {
   view: ViewId;
   path: string;
   label: string; // libellé de l'onglet et titre de la vue
+  shortLabel?: string; // libellé de l'onglet sur la barre du bas (mobile), si label est trop long
 };
 
 export const ROUTES: readonly Route[] = [
   { view: "week", path: "/", label: "Ma semaine" },
   { view: "plan", path: "/plan", label: "Mon plan" },
-  { view: "goal", path: "/objectif", label: "Objectif & allures" },
+  {
+    view: "goal",
+    path: "/objectif",
+    label: "Objectif & allures",
+    shortLabel: "Objectif",
+  },
   { view: "history", path: "/historique", label: "Historique" },
 ];
 

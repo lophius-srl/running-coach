@@ -56,7 +56,7 @@ export function AppNav({ current }: { current: ViewId }) {
   return (
     <nav className="app-nav" aria-label="Navigation principale">
       <ul className="app-nav-list">
-        {ROUTES.map(({ view, label }) => (
+        {ROUTES.map(({ view, label, shortLabel }) => (
           <li key={view}>
             <RouteLink
               view={view}
@@ -71,7 +71,14 @@ export function AppNav({ current }: { current: ViewId }) {
               >
                 {ICONS[view]}
               </svg>
-              {label}
+              {shortLabel ? (
+                <>
+                  <span className="app-nav-label-short">{shortLabel}</span>
+                  <span className="app-nav-label-full">{label}</span>
+                </>
+              ) : (
+                label
+              )}
             </RouteLink>
           </li>
         ))}

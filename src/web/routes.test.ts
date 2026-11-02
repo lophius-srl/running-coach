@@ -56,6 +56,13 @@ describe("ROUTES", () => {
     }
   });
 
+  it("raccourcit le libellé d'onglet trop long pour la barre du bas", () => {
+    expect(routeFor("goal").shortLabel).toBe("Objectif");
+    for (const { label, shortLabel } of ROUTES) {
+      if (shortLabel) expect(shortLabel.length).toBeLessThan(label.length);
+    }
+  });
+
   it("a des chemins et des libellés uniques", () => {
     expect(new Set(ROUTES.map((route) => route.path)).size).toBe(ROUTES.length);
     expect(new Set(ROUTES.map((route) => route.label)).size).toBe(
