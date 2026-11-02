@@ -95,6 +95,18 @@ describe("D1 migrations", () => {
     ]);
   });
 
+  // Compatibilité N-1 (ADR 0002) : 0005 ne fait qu'ajouter une table, le code précédent
+  // (qui l'ignore) fonctionne donc sans changement sur la nouvelle base.
+  it("add heart_rate_zones without altering existing tables", () => {
+    const migration = env.TEST_MIGRATIONS.find((m) =>
+      m.name.startsWith("0005_"),
+    );
+    expect(migration?.queries).toHaveLength(1);
+    expect(migration?.queries[0]).toMatch(
+      /^\s*(--[^\n]*\n\s*)*CREATE TABLE heart_rate_zones \(/,
+    );
+  });
+
   it("are idempotent when applied twice", async () => {
     await expect(
       applyD1Migrations(env.DB, env.TEST_MIGRATIONS),

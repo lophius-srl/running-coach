@@ -55,6 +55,31 @@ describe("karvonenZones", () => {
     }
   });
 
+  it("rounds exact halves up for every valid pair of heart rates", () => {
+    // Référence en entiers (centièmes de bpm) : aucune erreur d'arrondi flottant.
+    for (let rest = 30; rest <= 120; rest++) {
+      for (let max = Math.max(rest + 1, 120); max <= 230; max++) {
+        const expected = [50, 60, 70, 80, 90, 100].map((percent) =>
+          Math.floor((rest * 100 + percent * (max - rest) + 50) / 100),
+        );
+        expect(karvonenZones(rest, max)).toEqual(zones(...expected));
+      }
+    }
+  });
+
+  it("produces valid zones as soon as the reserve reaches 10 bpm", () => {
+    for (let rest = 30; rest <= 120; rest++) {
+      for (let max = Math.max(rest + 10, 120); max <= 230; max++) {
+        const result = validateHeartRate({
+          restingHr: rest,
+          maxHr: max,
+          zones: karvonenZones(rest, max),
+        });
+        expect(result.ok).toBe(true);
+      }
+    }
+  });
+
   it("produces empty zones for a tiny reserve, which validation rejects", () => {
     const result = validateHeartRate({
       restingHr: 119,
@@ -138,6 +163,67 @@ describe("validateHeartRate", () => {
         "Renseigne les 5 zones.",
       );
     }
+  });
+
+  it("rejects six zones", () => {
+    const six = [...valid.zones, { low: 190, high: 200 }];
+    const result = validateHeartRate({ ...valid, maxHr: 200, zones: six });
+    expect(result.ok ? null : result.errors.zones).toBe(
+      "Renseigne les 5 zones.",
+    );
+  });
+
+  it.each([
+    ["infinite", Number.POSITIVE_INFINITY],
+    ["NaN", Number.NaN],
+    ["null", null],
+    ["a boolean", true],
+  ])("rejects a %s zone bound", (_label, low) => {
+    const bad = valid.zones.map((zone, i) =>
+      i === 0 ? { ...zone, low } : zone,
+    );
+    expect(validateHeartRate({ ...valid, zones: bad })).toEqual({
+      ok: false,
+      errors: {
+        zones: "Z1 : saisis les deux bornes en bpm (nombres entiers).",
+        zone: 1,
+      },
+    });
+  });
+
+  it.each([-50, Number.POSITIVE_INFINITY, 1e21, "", [55], { value: 55 }])(
+    "rejects the resting heart rate %s",
+    (restingHr) => {
+      const result = validateHeartRate({ ...valid, restingHr });
+      expect(result.ok ? null : result.errors.restingHr).toBe(
+        "Saisis ta FC repos en bpm, entre 30 et 120.",
+      );
+    },
+  );
+
+  it("rejects a negative zone bound as below the resting heart rate", () => {
+    const bad = valid.zones.map((zone, i) =>
+      i === 0 ? { ...zone, low: -120 } : zone,
+    );
+    expect(validateHeartRate({ ...valid, zones: bad })).toEqual({
+      ok: false,
+      errors: {
+        zones:
+          "Z1 : la borne basse ne peut pas être sous ta FC repos (50 bpm).",
+        zone: 1,
+      },
+    });
+  });
+
+  it("rejects a top bound above the max heart rate even when all zones are contiguous", () => {
+    const result = validateHeartRate({
+      ...valid,
+      zones: zones(120, 134, 148, 162, 176, 191),
+    });
+    expect(result.ok ? null : result.errors).toEqual({
+      zones: "Z5 : la borne haute ne peut pas dépasser ta FC max (190 bpm).",
+      zone: 5,
+    });
   });
 
   it("requires integer bounds", () => {

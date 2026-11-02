@@ -148,6 +148,65 @@ describe("/api/heart-rate-zones", () => {
     });
   });
 
+  it("does not touch another user's zones", async () => {
+    await call(1, settings);
+    const other = { ...settings, restingHr: 60 };
+    await call(2, other);
+
+    expect(await (await call(1)).json()).toEqual({ heartRate: settings });
+    expect(await (await call(2)).json()).toEqual({ heartRate: other });
+  });
+
+  it("keeps the previous zones when an update is invalid", async () => {
+    await call(1, settings);
+    const response = await call(1, { ...settings, maxHr: 300 });
+
+    expect(response.status).toBe(400);
+    expect(await (await call(1)).json()).toEqual({ heartRate: settings });
+  });
+
+  it.each([
+    ["a resting heart rate as a string", { ...settings, restingHr: "50" }],
+    ["a null resting heart rate", { ...settings, restingHr: null }],
+    ["a negative resting heart rate", { ...settings, restingHr: -50 }],
+    ["a decimal max heart rate", { ...settings, maxHr: 189.5 }],
+    ["null zones", { ...settings, zones: null }],
+    ["four zones", { ...settings, zones: settings.zones.slice(0, 4) }],
+    [
+      "six zones",
+      { ...settings, zones: [...settings.zones, { low: 190, high: 200 }] },
+    ],
+    [
+      "a zone bound as a string",
+      {
+        ...settings,
+        zones: settings.zones.map((zone, i) =>
+          i === 0 ? { ...zone, low: "120" } : zone,
+        ),
+      },
+    ],
+    ["an array body", [settings]],
+    ["a null body", null],
+  ])("rejects %s and stores nothing", async (_label, body) => {
+    const response = await call(1, body === null ? "null" : body);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toHaveProperty("errors");
+    expect(await storedRows()).toEqual([]);
+  });
+
+  it("returns null when the stored zones are no longer valid", async () => {
+    await env.DB.prepare(
+      "INSERT INTO heart_rate_zones (user_id, resting_hr, max_hr, zones) VALUES (1, 50, 190, ?)",
+    )
+      .bind(JSON.stringify([1, 2, 3, 4, 5]))
+      .run();
+
+    const response = await call(1);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ heartRate: null });
+  });
+
   it("rejects a malformed body", async () => {
     const response = await call(1, "{not json");
     expect(response.status).toBe(400);
