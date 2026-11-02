@@ -17,10 +17,18 @@ const HEADING_ID = "paces-title";
 type ZoneKey = "endurance" | "threshold" | "vma" | "race";
 
 export const ZONES: { key: ZoneKey; label: string; hint: string }[] = [
-  { key: "endurance", label: "Endurance", hint: "footing facile, en aisance" },
+  {
+    key: "endurance",
+    label: "Endurance",
+    hint: "footing, sortie longue, récup : en aisance",
+  },
   { key: "threshold", label: "Seuil", hint: "soutenu, tenable environ 1 h" },
   { key: "vma", label: "VMA", hint: "fractionné court, 3 à 5 min" },
-  { key: "race", label: "Allure course", hint: "allure de ton objectif" },
+  {
+    key: "race",
+    label: "Allure course",
+    hint: "allure spécifique de ton objectif",
+  },
 ];
 
 type Props = { paces: TrainingPaces | null; basis: PaceBasis | null };
@@ -93,7 +101,9 @@ function PaceDetails({
     <div className="card paces">
       <p className="muted">
         Calculées {formatPaceBasis(basis)}, ta meilleure performance des 8
-        dernières semaines.
+        dernières semaines. Elle donne ton niveau estimé (VDOT, méthode de Jack
+        Daniels), d'où découle l'allure de chaque zone : elles se mettent à jour
+        dès que tu cours plus vite.
       </p>
       <dl className="pace-list">
         {ZONES.map(({ key, label, hint }) => {
