@@ -172,7 +172,7 @@ describe("RecentRuns card of a run", () => {
       "Kudos : 0",
     ]);
     expect(html).toMatch(
-      /<button type="button" class="run-toggle" aria-expanded="false" aria-controls="([^"]+)">Plus de détails<\/button>.*<div id="\1" class="run-panel" hidden="">/,
+      /<button type="button" class="run-toggle" aria-expanded="false" aria-controls="([^"]+)">Plus de détails<span class="visually-hidden"> : Footing<\/span><\/button><div id="\1" class="run-panel" hidden="">.*View on Strava/,
     );
   });
 
@@ -180,6 +180,20 @@ describe("RecentRuns card of a run", () => {
     expect(
       runDetails(render([run({ kudosCount: 3, prCount: 0, pauseS: 0 })])),
     ).toEqual(["Kudos : 3"]);
+  });
+
+  it("names each details button after its run", () => {
+    const html = render([
+      run({ id: 1, name: "Seuil", kudosCount: 1 }),
+      run({ id: 2, name: "  ", kudosCount: 1 }),
+    ]);
+
+    expect(html).toContain(
+      'Plus de détails<span class="visually-hidden"> : Seuil</span>',
+    );
+    expect(html).toContain(
+      'Plus de détails<span class="visually-hidden"> : Course sans titre</span>',
+    );
   });
 
   it("drops the panel and its button when no detail is known", () => {

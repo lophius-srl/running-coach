@@ -33,7 +33,7 @@ export type PaceInput = {
 // de « Daniels' Running Formula » (3e éd.), non vérifiées sur la source officielle (inaccessible).
 // I 95–100 % (≈ vVO2max, la « VMA ») encadre l'allure I publiée par V.O2 (news.vdoto2.com :
 // semi en 1:50 → ~4:39/km).
-export const ZONE_VDOT_SHARES = {
+const ZONE_VDOT_SHARES = {
   endurance: [0.62, 0.7],
   threshold: [0.86, 0.88],
   vma: [0.95, 1],

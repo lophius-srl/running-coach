@@ -232,7 +232,13 @@ function RunCard({ run }: { run: Run }) {
               onClick={() => setOpen(!open)}
             >
               Plus de détails
+              <span className="visually-hidden">{` : ${name}`}</span>
             </button>
+          )}
+          {details.length > 0 && (
+            <div id={panelId} className="run-panel" hidden={!open}>
+              <DetailList className="run-details" details={details} />
+            </div>
           )}
           <a
             className="strava-link"
@@ -244,11 +250,6 @@ function RunCard({ run }: { run: Run }) {
             <span className="visually-hidden">{` : ${name} (nouvel onglet)`}</span>
           </a>
         </div>
-        {details.length > 0 && (
-          <div id={panelId} className="run-panel" hidden={!open}>
-            <DetailList className="run-details" details={details} />
-          </div>
-        )}
       </article>
     </li>
   );

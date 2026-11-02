@@ -711,6 +711,7 @@ a {
 }
 
 .run-figure .figure-ratio::before {
+  content: "· ";
   content: "· " / "";
 }
 
@@ -781,7 +782,10 @@ a {
   transform: rotate(-135deg);
 }
 
+/* Panneau juste après son bouton dans le DOM, affiché sous toute la ligne du pied. */
 .run-panel {
+  flex-basis: 100%;
+  order: 1;
   padding-bottom: var(--space-3);
 }
 

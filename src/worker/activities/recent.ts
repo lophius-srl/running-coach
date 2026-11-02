@@ -111,6 +111,9 @@ function altitudeRange(elevLowM: number | null, elevHighM: number | null) {
     : { elevLowM, elevHighM };
 }
 
+// Format de start_date_local renvoyé par Strava (heure locale suffixée d'un faux « Z »).
+const LOCAL_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+
 // Pic de vitesse jugé aberrant (GPS) au-delà de 3 fois la vitesse moyenne.
 const MAX_SPEED_RATIO = 3;
 
@@ -164,9 +167,7 @@ export function parseRun(payload: string): ParsedRun | null {
     name: typeof name === "string" ? name : "",
     startDate: start_date,
     startDateLocal:
-      typeof local === "string" && !Number.isNaN(Date.parse(local))
-        ? local
-        : null,
+      typeof local === "string" && LOCAL_DATE.test(local) ? local : null,
     sportType: sportType ?? "",
     surface: surface(sportType ?? "", raw.trainer),
     workout: WORKOUTS.get(raw.workout_type) ?? null,

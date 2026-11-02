@@ -163,14 +163,18 @@ describe("parseRun", () => {
     ).toBe("2026-10-29T07:00:00Z");
   });
 
-  it.each([undefined, "demain", 1730000000])(
-    "leaves the local start time empty when it is %o",
-    (local) => {
-      expect(
-        parseRun(payload({ start_date_local: local }))?.startDateLocal,
-      ).toBeNull();
-    },
-  );
+  it.each([
+    undefined,
+    "demain",
+    1730000000,
+    "2026-10-29T07:00:00+09:00",
+    "2026-10-29T07:00:00.000Z",
+    "2026-10-29",
+  ])("leaves the local start time empty when it is %o", (local) => {
+    expect(
+      parseRun(payload({ start_date_local: local }))?.startDateLocal,
+    ).toBeNull();
+  });
 
   it("never reports a negative pause when the elapsed time is shorter", () => {
     expect(parseRun(payload({ elapsed_time: 2900 }))?.pauseS).toBe(0);
