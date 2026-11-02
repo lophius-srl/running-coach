@@ -1274,8 +1274,32 @@ details[open] > .plan-summary::after {
   box-shadow: inset 0 calc(-1 * var(--accent-width)) 0 var(--color-strava);
 }
 
+/* Option indisponible (« Semaine » sur « Tout » en mobile) : grisée et barrée, expliquée à côté. */
+.segmented-option input:disabled {
+  cursor: not-allowed;
+}
+
+.segmented-option input:disabled + span {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+
 .segmented-option input:focus-visible + span {
   outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: calc(-1 * var(--focus-width));
+}
+
+.progression-hint {
+  flex-basis: 100%;
+}
+
+/* Statut de rechargement : hauteur réservée pour que la page ne saute pas. */
+.progression-status {
+  min-height: 1.45em;
+  margin-top: calc(-1 * var(--space-3));
+}
+
+.volume-table-scroll:focus-visible {
   outline-offset: calc(-1 * var(--focus-width));
 }
 

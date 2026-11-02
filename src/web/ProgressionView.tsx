@@ -16,6 +16,7 @@ import {
   tableDate,
   describeSeries,
   formatHoursMinutes,
+  formatKm,
   GROUP_OPTIONS,
   PERIOD_OPTIONS,
   SERIES,
@@ -25,27 +26,42 @@ import {
 } from "./progression";
 import { Alert, Loading } from "./ui";
 
-type State =
-  | { status: "loading" }
-  | { status: "loaded"; data: ProgressionResponse }
-  | { status: "failed" };
+// Les données précédentes restent affichées pendant un rechargement (pas de saut de page).
+type State = {
+  data: ProgressionResponse | null;
+  loading: boolean;
+  failed: boolean;
+};
 
 async function loadProgression(
   period: Period,
   group: Grouping,
-): Promise<State> {
+): Promise<ProgressionResponse | null> {
   try {
     const response = await fetch(
       `/api/progression?period=${period}&group=${group}`,
     );
-    if (!response.ok) return { status: "failed" };
-    return {
-      status: "loaded",
-      data: (await response.json()) as ProgressionResponse,
-    };
+    if (!response.ok) return null;
+    return (await response.json()) as ProgressionResponse;
   } catch {
-    return { status: "failed" };
+    return null;
   }
+}
+
+// Petit écran : « Tout » par semaine ferait des centaines de barres d'un pixel.
+const NARROW_QUERY = "(max-width: 767.98px)";
+
+function useNarrow(): boolean {
+  const [narrow, setNarrow] = useState(
+    () => window.matchMedia(NARROW_QUERY).matches,
+  );
+  useEffect(() => {
+    const media = window.matchMedia(NARROW_QUERY);
+    const onChange = () => setNarrow(media.matches);
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
+  return narrow;
 }
 
 type ChoiceProps<T extends string> = {
@@ -54,6 +70,7 @@ type ChoiceProps<T extends string> = {
   options: readonly { value: T; label: string }[];
   value: T;
   onChange: (value: T) => void;
+  disabled?: T | null; // option indisponible (expliquée à côté)
 };
 
 // Choix exclusif en boutons segmentés (radios natives : flèches du clavier comprises).
@@ -63,6 +80,7 @@ function Choice<T extends string>({
   options,
   value,
   onChange,
+  disabled = null,
 }: ChoiceProps<T>) {
   return (
     <fieldset className="segmented">
@@ -75,6 +93,7 @@ function Choice<T extends string>({
               name={name}
               value={option.value}
               checked={option.value === value}
+              disabled={option.value === disabled}
               onChange={() => onChange(option.value)}
             />
             <span>{option.label}</span>
@@ -132,7 +151,12 @@ function VolumeTable({
       <summary className="plan-summary">
         Détail {group === "week" ? "par semaine" : "par mois"}
       </summary>
-      <div className="volume-table-scroll">
+      <div
+        className="volume-table-scroll"
+        tabIndex={0}
+        role="region"
+        aria-label={`Volume ${group === "week" ? "par semaine" : "par mois"}`}
+      >
         <table>
           <thead>
             <tr>
@@ -149,7 +173,7 @@ function VolumeTable({
             {[...buckets].reverse().map((b) => (
               <tr key={b.start}>
                 <th scope="row">{tableDate(b.start, group)}</th>
-                <td>{SERIES[0].format(b.distanceM)}</td>
+                <td>{formatKm(b.distanceM)}</td>
                 <td>{formatHoursMinutes(b.movingTimeS)}</td>
                 <td>{b.count}</td>
               </tr>
@@ -171,56 +195,37 @@ function ImportLink({ children }: { children: string }) {
 
 export function ProgressionView() {
   const [period, setPeriod] = useState<Period>("6m");
-  const [group, setGroup] = useState<Grouping>("week");
-  const [state, setState] = useState<State>({ status: "loading" });
+  const [chosenGroup, setGroup] = useState<Grouping>("week");
+  const narrow = useNarrow();
+  const weeksTooMany = narrow && period === "all";
+  const group = weeksTooMany ? "month" : chosenGroup;
+  const [state, setState] = useState<State>({
+    data: null,
+    loading: true,
+    failed: false,
+  });
 
   useEffect(() => {
     let current = true;
-    setState({ status: "loading" });
-    loadProgression(period, group).then((next) => current && setState(next));
+    setState((previous) => ({ ...previous, loading: true, failed: false }));
+    loadProgression(period, group).then((data) => {
+      if (!current) return;
+      setState((previous) =>
+        data === null
+          ? { ...previous, loading: false, failed: true }
+          : { data, loading: false, failed: false },
+      );
+    });
     return () => {
       current = false;
     };
   }, [period, group]);
 
-  const controls = (
-    <div className="progression-controls">
-      <Choice
-        legend="Période"
-        name="period"
-        options={PERIOD_OPTIONS}
-        value={period}
-        onChange={setPeriod}
-      />
-      <Choice
-        legend="Regrouper par"
-        name="group"
-        options={GROUP_OPTIONS}
-        value={group}
-        onChange={setGroup}
-      />
-    </div>
-  );
-
-  if (state.status === "loading") {
-    return (
-      <>
-        {controls}
-        <Loading label="Calcul de ta progression…" />
-      </>
-    );
+  const { data, loading, failed } = state;
+  if (data === null && loading) {
+    return <Loading label="Calcul de ta progression…" />;
   }
-  if (state.status === "failed") {
-    return (
-      <>
-        {controls}
-        <Alert message="Impossible de charger ta progression. Réessaie dans un instant." />
-      </>
-    );
-  }
-
-  const { data } = state;
-  if (data.lastRunDate === null) {
+  if (data?.lastRunDate === null) {
     return (
       <section className="card state state-empty">
         <p>Aucune course pour l'instant.</p>
@@ -235,11 +240,39 @@ export function ProgressionView() {
     );
   }
 
-  const stale = staleMessage(data);
+  const stale = data && staleMessage(data);
   const [volume, ...others] = SERIES;
   return (
     <>
-      {controls}
+      <div className="progression-controls">
+        <Choice
+          legend="Période"
+          name="period"
+          options={PERIOD_OPTIONS}
+          value={period}
+          onChange={setPeriod}
+        />
+        <Choice
+          legend="Regrouper par"
+          name="group"
+          options={GROUP_OPTIONS}
+          value={group}
+          onChange={setGroup}
+          disabled={weeksTooMany ? "week" : null}
+        />
+        {weeksTooMany && (
+          <p className="muted progression-hint">
+            Sur toute la période, le détail par semaine s'affiche sur un écran
+            plus large.
+          </p>
+        )}
+      </div>
+      <p className="muted progression-status" role="status">
+        {loading ? "Mise à jour…" : ""}
+      </p>
+      {failed && (
+        <Alert message="Impossible de charger ta progression. Réessaie dans un instant." />
+      )}
       {stale && (
         <div className="card state notice">
           <p>{stale}</p>
@@ -248,15 +281,22 @@ export function ProgressionView() {
           </p>
         </div>
       )}
-      <div className="chart-grid-layout">
-        <div className="view-stack">
-          <SeriesChart series={volume} data={data} />
-          <VolumeTable buckets={data.buckets} group={data.group} />
-        </div>
-        {others.map((series) => (
-          <SeriesChart key={series.id} series={series} data={data} />
-        ))}
-      </div>
+      {data && (
+        <section aria-labelledby="progression-charts-title" aria-busy={loading}>
+          <h2 id="progression-charts-title" className="visually-hidden">
+            Graphiques
+          </h2>
+          <div className="chart-grid-layout">
+            <div className="view-stack">
+              <SeriesChart series={volume} data={data} />
+              <VolumeTable buckets={data.buckets} group={data.group} />
+            </div>
+            {others.map((series) => (
+              <SeriesChart key={series.id} series={series} data={data} />
+            ))}
+          </div>
+        </section>
+      )}
     </>
   );
 }

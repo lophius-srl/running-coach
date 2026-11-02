@@ -41,6 +41,11 @@ describe("summarize", () => {
     expect(summarize([40, 40, 30, 30]).trend).toBe("down");
   });
 
+  it("accepte un seuil de tendance", () => {
+    expect(summarize([100, 103]).trend).toBe("flat");
+    expect(summarize([100, 103], 0.02).trend).toBe("up");
+  });
+
   it("n'a ni moyenne ni tendance sans valeur, pas de tendance avec une seule", () => {
     expect(summarize([null, null])).toEqual({
       last: null,

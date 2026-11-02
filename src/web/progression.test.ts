@@ -40,6 +40,24 @@ describe("describeSeries", () => {
     );
   });
 
+  it("parle de dernière valeur quand la dernière période n'en a pas", () => {
+    expect(describeSeries(series("heartrate"), [150, 152, null])).toMatch(
+      /^Dernière valeur : 152 bpm/,
+    );
+  });
+
+  it("applique un seuil de tendance propre à chaque série", () => {
+    // +2,5 % : significatif pour le VDOT (2 %), pas pour le volume (5 %).
+    expect(describeSeries(series("vdot"), [40, 41])).toContain("en hausse");
+    expect(describeSeries(series("distance"), [40_000, 41_000])).toContain(
+      "stable",
+    );
+    // +4 % de FC : en hausse (3 %).
+    expect(describeSeries(series("heartrate"), [150, 156])).toContain(
+      "en hausse",
+    );
+  });
+
   it("signale l'absence de données", () => {
     expect(describeSeries(series("vdot"), [null])).toBe(
       "Aucune donnée sur la période.",
@@ -101,7 +119,16 @@ describe("graphiques SVG", () => {
   it("expose une image décrite, le résumé et la valeur de la dernière période", () => {
     const html = renderToStaticMarkup(createElement(BarChart, props));
     expect(html).toContain('role="img"');
-    expect(html).toContain('aria-label="Allure. Résumé accessible."');
+    const svg = /<svg[^>]*>/.exec(html)![0];
+    const titleId = /aria-labelledby="([^"]+)"/.exec(svg)![1];
+    const summaryId = /aria-describedby="([^"]+)"/.exec(svg)![1];
+    expect(html).toContain(
+      `<h3 id="${titleId}" class="chart-title">Allure</h3>`,
+    );
+    expect(html).toContain(
+      `id="${summaryId}" class="chart-summary muted">Résumé accessible.`,
+    );
+    expect(html).toContain('aria-live="off"'); // annonces seulement au clavier
     expect(html).toContain("semaine D : 290");
     expect(html).toContain('tabindex="0"');
     expect(html.match(/<rect/g)).toHaveLength(3); // pas de barre pour le trou

@@ -67,7 +67,8 @@ export function tableDate(start: string, group: Grouping): string {
 
 const kmNumber = (meters: number) =>
   (Math.round(meters / 100) / 10).toLocaleString("fr-FR");
-const km = (meters: number) => `${kmNumber(meters)} km`;
+// Distance au dixième de km : « 45,7 km » (axes, résumés, récapitulatif du volume).
+export const formatKm = (meters: number) => `${kmNumber(meters)} km`;
 const integer = (value: number) => Math.round(value).toLocaleString("fr-FR");
 
 // Durée courte du récapitulatif : 13 453 s → « 3 h 44 ».
@@ -87,6 +88,7 @@ export type Series = {
   format: (value: number) => string;
   axisFormat: (value: number) => string; // graduations, sans unité
   minSpan?: number; // étendue minimale de l'axe des barres, dans l'unité de la valeur
+  trendThreshold?: number; // variation relative jugée significative (5 % par défaut)
   inverted?: boolean; // allure : en haut = plus rapide
 };
 
@@ -96,7 +98,7 @@ export const SERIES: readonly Series[] = [
     title: "Volume",
     kind: "bar",
     value: (b) => b.distanceM,
-    format: km,
+    format: formatKm,
     axisFormat: kmNumber,
     minSpan: 1000,
   },
@@ -123,6 +125,7 @@ export const SERIES: readonly Series[] = [
     title: "FC moyenne",
     kind: "line",
     value: (b) => b.heartrate,
+    trendThreshold: 0.03, // la FC varie peu : 3 % (≈ 5 bpm) est déjà net
     format: formatHeartrate,
     axisFormat: integer,
   },
@@ -131,7 +134,7 @@ export const SERIES: readonly Series[] = [
     title: "Sortie la plus longue",
     kind: "bar",
     value: (b) => b.longestM,
-    format: km,
+    format: formatKm,
     axisFormat: kmNumber,
     minSpan: 1000,
   },
@@ -140,6 +143,7 @@ export const SERIES: readonly Series[] = [
     title: "Niveau estimé (VDOT)",
     kind: "line",
     value: (b) => b.vdot,
+    trendThreshold: 0.02, // ≈ 1 point de VDOT
     format: formatVdot,
     axisFormat: (v) => v.toLocaleString("fr-FR"),
   },
@@ -162,15 +166,19 @@ export function completePeriods<T>(values: readonly T[]): T[] {
   return values.length > 1 ? values.slice(0, -1) : [...values];
 }
 
-// Résumé texte d'un graphique : « Dernière période complète : 32,4 km · moyenne : 28,1 km · tendance : en hausse ».
+// Résumé texte d'un graphique : « Dernière période complète : 32,4 km · moyenne : 28,1 km ·
+// tendance : en hausse ». Si la dernière période n'a pas de valeur (allure, FC, niveau), on parle
+// de « dernière valeur » : celle de la dernière période qui en a une.
 export function describeSeries(
   series: Series,
   values: (number | null)[],
 ): string {
-  const { last, mean, trend } = summarize(values);
+  const { last, mean, trend } = summarize(values, series.trendThreshold);
   if (last === null || mean === null) return "Aucune donnée sur la période.";
+  const lastLabel =
+    values.at(-1) === null ? "Dernière valeur" : "Dernière période complète";
   const parts = [
-    `Dernière période complète : ${series.format(last)}`,
+    `${lastLabel} : ${series.format(last)}`,
     `moyenne : ${series.format(mean)}`,
   ];
   if (trend !== null) {

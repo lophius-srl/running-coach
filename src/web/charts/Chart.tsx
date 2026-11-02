@@ -66,6 +66,9 @@ function Chart(props: Props & { kind: "bar" | "line" }) {
   const titleId = useId();
   const readoutId = useId();
   const hintId = useId();
+  const summaryId = useId();
+  // La valeur n'est annoncée qu'au clavier : au survol de la souris, elle saturerait le lecteur.
+  const [focused, setFocused] = useState(false);
 
   const values = points
     .map((p) => p.value)
@@ -122,7 +125,11 @@ function Chart(props: Props & { kind: "bar" | "line" }) {
       <h3 id={titleId} className="chart-title">
         {title}
       </h3>
-      <p id={readoutId} className="chart-readout" aria-live="polite">
+      <p
+        id={readoutId}
+        className="chart-readout"
+        aria-live={focused ? "polite" : "off"}
+      >
         {readout}
       </p>
       <div
@@ -133,10 +140,13 @@ function Chart(props: Props & { kind: "bar" | "line" }) {
         aria-labelledby={titleId}
         aria-describedby={`${readoutId} ${hintId}`}
         onKeyDown={onKeyDown}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
       >
         <svg
           role="img"
-          aria-label={`${title}. ${summary}`}
+          aria-labelledby={titleId}
+          aria-describedby={summaryId}
           viewBox={`0 0 ${width} ${HEIGHT}`}
           width="100%"
           height={HEIGHT}
@@ -243,7 +253,9 @@ function Chart(props: Props & { kind: "bar" | "line" }) {
       <span id={hintId} className="visually-hidden">
         Flèches gauche et droite pour parcourir les périodes.
       </span>
-      <figcaption className="chart-summary muted">{summary}</figcaption>
+      <figcaption id={summaryId} className="chart-summary muted">
+        {summary}
+      </figcaption>
     </figure>
   );
 }

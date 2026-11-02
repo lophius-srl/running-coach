@@ -39,8 +39,12 @@ export type Summary = {
   trend: Trend | null;
 };
 
-// Dernière valeur connue, moyenne et tendance (moyenne de la 2e moitié contre la 1re, ±5 %).
-export function summarize(values: readonly (number | null)[]): Summary {
+// Dernière valeur connue, moyenne et tendance : moyenne de la 2e moitié contre la 1re, au-delà
+// de ±threshold (5 % par défaut) en relatif.
+export function summarize(
+  values: readonly (number | null)[],
+  threshold = 0.05,
+): Summary {
   const known = values.filter((v): v is number => v !== null);
   if (known.length === 0) return { last: null, mean: null, trend: null };
   const mean = (list: number[]) =>
@@ -52,7 +56,7 @@ export function summarize(values: readonly (number | null)[]): Summary {
     const after = mean(known.slice(known.length - half));
     const change =
       before === 0 ? (after > 0 ? 1 : 0) : (after - before) / before;
-    trend = change > 0.05 ? "up" : change < -0.05 ? "down" : "flat";
+    trend = change > threshold ? "up" : change < -threshold ? "down" : "flat";
   }
   return { last: known[known.length - 1], mean: mean(known), trend };
 }
