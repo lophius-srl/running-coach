@@ -135,6 +135,7 @@ describe("/api/heart-rate-zones", () => {
         zones:
           "Z2 : la borne basse doit être égale à la borne haute de Z1 (134 bpm), sans chevauchement ni trou.",
         zone: 2,
+        bound: "low",
       },
     });
     expect(await storedRows()).toEqual([]);

@@ -6,6 +6,7 @@ import {
   type HeartRateErrors,
   type HeartRateResponse,
   type HeartRateSettings,
+  type ZoneBound,
 } from "../core/heart-rate";
 import {
   computeZones,
@@ -98,7 +99,8 @@ export function HeartRateZones() {
 type Status = "ready" | "saving" | "saved" | "computed" | "saveFailed";
 
 const FIELD_IDS = { restingHr: "hr-resting", maxHr: "hr-max" } as const;
-const zoneInputId = (zone: number) => `hr-zone-${zone}-low`;
+const zoneInputId = (zone: number, bound: ZoneBound) =>
+  `hr-zone-${zone}-${bound}`;
 const ZONES_ERROR_ID = "hr-zones-error";
 
 function FieldError({ id, error }: { id: string; error?: string }) {
@@ -110,6 +112,18 @@ function FieldError({ id, error }: { id: string; error?: string }) {
   );
 }
 
+// Résumé annoncé par les lecteurs d'écran, même si le champ en cause avait déjà le focus.
+function ErrorSummary({ errors }: { errors: HeartRateErrors }) {
+  const messages = [errors.restingHr, errors.maxHr, errors.zones].filter(
+    Boolean,
+  );
+  return (
+    <div role="alert" className="visually-hidden">
+      {messages.length > 0 && `Erreur : ${messages.join(" ")}`}
+    </div>
+  );
+}
+
 // Formulaire affiché une fois les zones chargées, pour ne pas écraser des zones existantes.
 function ZonesForm({ settings }: { settings: HeartRateSettings | null }) {
   const [form, setForm] = useState<HeartRateForm>(() =>
@@ -117,13 +131,15 @@ function ZonesForm({ settings }: { settings: HeartRateSettings | null }) {
   );
   const [errors, setErrors] = useState<HeartRateErrors>({});
   const [status, setStatus] = useState<Status>("ready");
+  // Change à chaque affichage d'erreurs : le résumé est recréé, donc annoncé de nouveau.
+  const [errorCount, setErrorCount] = useState(0);
 
   function update(changes: Partial<HeartRateForm>) {
     setForm((current) => ({ ...current, ...changes }));
     if (status === "saved" || status === "computed") setStatus("ready");
   }
 
-  function updateZone(index: number, bound: "low" | "high", value: string) {
+  function updateZone(index: number, bound: ZoneBound, value: string) {
     update({
       zones: form.zones.map((zone, i) =>
         i === index ? { ...zone, [bound]: value } : zone,
@@ -131,13 +147,18 @@ function ZonesForm({ settings }: { settings: HeartRateSettings | null }) {
     });
   }
 
+  // Erreurs posées dans le DOM (aria-invalid, aria-describedby) avant le focus sur le premier
+  // champ en cause.
   function showErrors(found: HeartRateErrors) {
-    setErrors(found);
+    flushSync(() => {
+      setErrors(found);
+      if (Object.keys(found).length > 0) setErrorCount((count) => count + 1);
+    });
     const id = found.restingHr
       ? FIELD_IDS.restingHr
       : found.maxHr
         ? FIELD_IDS.maxHr
-        : found.zones && zoneInputId(found.zone ?? 1);
+        : found.zones && zoneInputId(found.zone ?? 1, found.bound ?? "low");
     if (id) document.getElementById(id)?.focus();
   }
 
@@ -220,17 +241,19 @@ function ZonesForm({ settings }: { settings: HeartRateSettings | null }) {
           </thead>
           <tbody>
             {HEART_RATE_ZONES.map(({ label, name }, index) => {
-              const invalid =
-                Boolean(errors.zones) && errors.zone === index + 1;
-              const bound = (key: "low" | "high", text: string) => (
+              const bound = (key: ZoneBound, text: string) => (
                 <td>
                   <input
-                    id={key === "low" ? zoneInputId(index + 1) : undefined}
+                    id={zoneInputId(index + 1, key)}
                     className="input hr-input"
                     inputMode="numeric"
                     autoComplete="off"
                     aria-label={`${label} ${name.toLowerCase()}, ${text} (bpm)`}
-                    aria-invalid={invalid}
+                    aria-invalid={
+                      Boolean(errors.zones) &&
+                      errors.zone === index + 1 &&
+                      (errors.bound ?? "low") === key
+                    }
                     aria-describedby={errors.zones ? ZONES_ERROR_ID : undefined}
                     value={form.zones[index][key]}
                     onChange={(e) => updateZone(index, key, e.target.value)}
@@ -267,6 +290,7 @@ function ZonesForm({ settings }: { settings: HeartRateSettings | null }) {
             "Zones calculées : ajuste-les si besoin, puis enregistre."}
         </span>
       </div>
+      <ErrorSummary key={errorCount} errors={errors} />
       {status === "saveFailed" && (
         <Alert message="Impossible d'enregistrer tes zones, réessaie plus tard." />
       )}

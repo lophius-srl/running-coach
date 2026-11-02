@@ -20,10 +20,14 @@ export type HeartRateSettings = {
 export type HeartRateResponse = { heartRate: HeartRateSettings | null };
 
 export type HeartRateField = "restingHr" | "maxHr" | "zones";
-// `zone` : numéro (1 à 5) de la zone en cause dans `zones`, pour la signaler dans le tableau.
+// `zone` et `bound` : zone (1 à 5) et borne en cause dans `zones`, pour cibler le bon champ.
+export type ZoneBound = "low" | "high";
 export type HeartRateErrors = Partial<Record<HeartRateField, string>> & {
   zone?: number;
+  bound?: ZoneBound;
 };
+
+type ZonesError = { message: string; zone?: number; bound?: ZoneBound };
 export type HeartRateValidation =
   | { ok: true; settings: HeartRateSettings }
   | { ok: false; errors: HeartRateErrors };
@@ -110,16 +114,21 @@ function zonesError(
   zones: unknown,
   restingHr: number | null,
   maxHr: number | null,
-): { message: string; zone?: number } | null {
+): ZonesError | null {
   if (!Array.isArray(zones) || zones.length !== HEART_RATE_ZONES.length) {
     return { message: `Renseigne les ${HEART_RATE_ZONES.length} zones.` };
   }
   for (const [index, zone] of zones.entries()) {
     const { label } = HEART_RATE_ZONES[index];
-    const error = (message: string) => ({ message, zone: index + 1 });
+    const error = (message: string, bound: ZoneBound = "low") => ({
+      message,
+      zone: index + 1,
+      bound,
+    });
     if (!isZone(zone) || !isBpm(zone.low) || !isBpm(zone.high)) {
       return error(
         `${label} : saisis les deux bornes en bpm (nombres entiers).`,
+        isZone(zone) && isBpm(zone.low) ? "high" : "low",
       );
     }
     if (zone.low >= zone.high) {
@@ -140,12 +149,14 @@ function zonesError(
     return {
       message: `Z1 : la borne basse ne peut pas être sous ta FC repos (${restingHr} bpm).`,
       zone: 1,
+      bound: "low",
     };
   }
   if (maxHr !== null && last.high > maxHr) {
     return {
       message: `Z5 : la borne haute ne peut pas dépasser ta FC max (${maxHr} bpm).`,
       zone: zones.length,
+      bound: "high",
     };
   }
   return null;
@@ -174,6 +185,7 @@ export function validateHeartRate(input: unknown): HeartRateValidation {
   if (zoneError) {
     errors.zones = zoneError.message;
     if (zoneError.zone) errors.zone = zoneError.zone;
+    if (zoneError.bound) errors.bound = zoneError.bound;
   }
 
   if (Object.keys(errors).length > 0) return { ok: false, errors };

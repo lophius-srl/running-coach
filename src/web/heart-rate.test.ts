@@ -29,6 +29,7 @@ describe("heart rate form", () => {
         maxHr: "Saisis ta FC max en bpm, entre 120 et 230.",
         zones: "Z1 : saisis les deux bornes en bpm (nombres entiers).",
         zone: 1,
+        bound: "low",
       },
     });
   });
