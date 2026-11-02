@@ -21,17 +21,26 @@ const IMPORTED_RUNS = `
 
 const API_PAYLOADS = "SELECT payload FROM strava_activities WHERE user_id = ?";
 
-// Payload brut Strava → course ; null s'il est illisible ou incomplet.
-export function stravaRunSample(payload: string): RunSample | null {
-  let data: unknown;
+// Payload brut Strava → objet, ou null s'il est illisible.
+export function parsePayload(payload: string): Record<string, unknown> | null {
   try {
-    data = JSON.parse(payload);
+    const data: unknown = JSON.parse(payload);
+    return typeof data === "object" && data !== null && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : null;
   } catch {
     return null;
   }
-  if (typeof data !== "object" || data === null) return null;
-  const { id, start_date, sport_type, type, distance, moving_time } =
-    data as Record<string, unknown>;
+}
+
+// Payload brut Strava → course ; null s'il est illisible ou incomplet.
+export function stravaRunSample(payload: string): RunSample | null {
+  const data = parsePayload(payload);
+  return data === null ? null : runSampleOf(data);
+}
+
+export function runSampleOf(data: Record<string, unknown>): RunSample | null {
+  const { id, start_date, sport_type, type, distance, moving_time } = data;
   const sportType = typeof sport_type === "string" ? sport_type : type;
   if (
     !Number.isSafeInteger(id) ||

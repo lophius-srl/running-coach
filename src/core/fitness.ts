@@ -44,11 +44,11 @@ export const SLOWEST_PACE_S_PER_KM = 15 * 60;
 export const MAX_VDOT = 85;
 
 // Fusion par id : la version API (plus fraîche) remplace la version importée.
-export function mergeRuns(
-  imported: readonly RunSample[],
-  api: readonly RunSample[],
-): RunSample[] {
-  const byId = new Map<number, RunSample>();
+export function mergeRuns<T extends RunSample>(
+  imported: readonly T[],
+  api: readonly T[],
+): T[] {
+  const byId = new Map<number, T>();
   for (const run of [...imported, ...api]) byId.set(run.id, run);
   return [...byId.values()];
 }

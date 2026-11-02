@@ -8,6 +8,7 @@ import { goalRoutes } from "./goals/routes";
 import { heartRateRoutes, loadHeartRate } from "./heart-rate/routes";
 import { historyRoutes } from "./history/routes";
 import { planRoutes } from "./plans/routes";
+import { progressionRoutes } from "./progression/routes";
 import type { AppEnv, Bindings } from "./env";
 import { StravaError, StravaReauthorizationRequired } from "./strava/client";
 import { runDailySync, runSync } from "./sync/sync";
@@ -41,6 +42,7 @@ app.route("/api/goal", goalRoutes);
 app.route("/api/heart-rate-zones", heartRateRoutes);
 app.route("/api/history", historyRoutes);
 app.route("/api/plan", planRoutes);
+app.route("/api/progression", progressionRoutes);
 app.route("/api/strava/webhook", webhookRoutes);
 
 app.get("/api/me", async (c) => {
