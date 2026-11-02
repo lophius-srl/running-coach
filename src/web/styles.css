@@ -526,37 +526,62 @@ a {
   font-weight: 700;
 }
 
-/* Chiffres clés de la semaine : une carte, trois valeurs côte à côte. */
+/* Chiffres clés de la semaine : une carte, quatre valeurs côte à côte. Colonnes à la largeur
+   de leur contenu : « 35,90 km » tient sur une ligne à 390 px. */
 
 .key-figures {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, auto);
   margin-bottom: var(--space-3);
   padding: var(--space-2) 0;
   font-variant-numeric: tabular-nums;
 }
 
+/* La valeur en haut, puis le libellé, puis (D+) le ratio en sous-libellé. */
 .key-figure {
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
   padding: 0 var(--space-3);
+}
+
+.key-figure dt {
+  order: 1;
+}
+
+.key-figure .figure-ratio {
+  order: 2;
 }
 
 .key-figure + .key-figure {
   border-left: var(--border-width) solid var(--color-border-subtle);
 }
 
-.key-figure dd {
+.key-figure dd:first-of-type {
   font-size: var(--font-size-lg);
   font-weight: 700;
   line-height: 1.3;
   overflow-wrap: break-word;
 }
 
+.key-figure abbr {
+  text-decoration: none;
+}
+
 @media (min-width: 480px) {
-  .key-figure dd {
+  .key-figure dd:first-of-type {
     font-size: var(--font-size-figure);
   }
+}
+
+/* Ratio D+/km : sous-libellé dans les totaux, accolé au D+ dans la ligne d'un run (le point
+   médian y est décoratif : texte alternatif vide). */
+.figure-ratio {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.run-elevation .figure-ratio::before {
+  content: "· " / "";
 }
 
 /* Listes denses (runs, séances) : une carte, des lignes séparées par un filet. */
@@ -622,6 +647,12 @@ a {
 
 .run-figures div:first-child dd {
   font-weight: 700;
+}
+
+.run-elevation {
+  display: flex;
+  gap: 0 0.35em;
+  white-space: nowrap;
 }
 
 /* Grilles de chiffres (import de l'historique). */

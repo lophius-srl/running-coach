@@ -79,6 +79,23 @@ export function formatHeartrate(averageHeartrate: number | null): string {
   return `${Math.round(averageHeartrate)} bpm`;
 }
 
+// D+ arrondi au mètre (« 245 m ») ; « – » si Strava ne l'a pas. withLabel nomme le chiffre quand
+// aucun libellé n'est visible : « 245 m D+ », « – D+ ».
+export function formatElevationGain(
+  elevationGainM: number | null,
+  { withLabel = false } = {},
+): string {
+  const value =
+    elevationGainM === null ? "–" : `${Math.round(elevationGainM)} m`;
+  return withLabel ? `${value} D+` : value;
+}
+
+// Ratio D+/km déjà arrondi à l'entier par src/core/elevation (« 29 m/km ») ; « – » si inconnu.
+export function formatElevationPerKm(elevationPerKm: number | null): string {
+  if (elevationPerKm === null) return "–";
+  return `${elevationPerKm} m/km`;
+}
+
 // Nom de la course tel que saisi sur Strava ; repli si vide ou fait d'espaces.
 export function formatRunName(name: string): string {
   return name.trim() || "Course sans titre";
