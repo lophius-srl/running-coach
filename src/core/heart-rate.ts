@@ -16,8 +16,14 @@ export type HeartRateSettings = {
   zones: HeartRateZone[]; // 5 zones, Z1 → Z5
 };
 
+// Réponse de GET et PUT /api/heart-rate-zones : null tant que rien n'est enregistré.
+export type HeartRateResponse = { heartRate: HeartRateSettings | null };
+
 export type HeartRateField = "restingHr" | "maxHr" | "zones";
-export type HeartRateErrors = Partial<Record<HeartRateField, string>>;
+// `zone` : numéro (1 à 5) de la zone en cause dans `zones`, pour la signaler dans le tableau.
+export type HeartRateErrors = Partial<Record<HeartRateField, string>> & {
+  zone?: number;
+};
 export type HeartRateValidation =
   | { ok: true; settings: HeartRateSettings }
   | { ok: false; errors: HeartRateErrors };
@@ -104,30 +110,43 @@ function zonesError(
   zones: unknown,
   restingHr: number | null,
   maxHr: number | null,
-): string | null {
+): { message: string; zone?: number } | null {
   if (!Array.isArray(zones) || zones.length !== HEART_RATE_ZONES.length) {
-    return `Renseigne les ${HEART_RATE_ZONES.length} zones.`;
+    return { message: `Renseigne les ${HEART_RATE_ZONES.length} zones.` };
   }
   for (const [index, zone] of zones.entries()) {
     const { label } = HEART_RATE_ZONES[index];
+    const error = (message: string) => ({ message, zone: index + 1 });
     if (!isZone(zone) || !isBpm(zone.low) || !isBpm(zone.high)) {
-      return `${label} : saisis les deux bornes en bpm (nombres entiers).`;
+      return error(
+        `${label} : saisis les deux bornes en bpm (nombres entiers).`,
+      );
     }
     if (zone.low >= zone.high) {
-      return `${label} : la borne basse doit être inférieure à la borne haute.`;
+      return error(
+        `${label} : la borne basse doit être inférieure à la borne haute.`,
+      );
     }
     const previous: unknown = zones[index - 1];
     if (isZone(previous) && previous.high !== zone.low) {
-      return `${label} : la borne basse doit être égale à la borne haute de ${HEART_RATE_ZONES[index - 1].label} (${String(previous.high)} bpm), sans chevauchement ni trou.`;
+      return error(
+        `${label} : la borne basse doit être égale à la borne haute de ${HEART_RATE_ZONES[index - 1].label} (${String(previous.high)} bpm), sans chevauchement ni trou.`,
+      );
     }
   }
   const first = zones[0] as HeartRateZone;
   const last = zones[zones.length - 1] as HeartRateZone;
   if (restingHr !== null && first.low < restingHr) {
-    return `Z1 : la borne basse ne peut pas être sous ta FC repos (${restingHr} bpm).`;
+    return {
+      message: `Z1 : la borne basse ne peut pas être sous ta FC repos (${restingHr} bpm).`,
+      zone: 1,
+    };
   }
   if (maxHr !== null && last.high > maxHr) {
-    return `Z5 : la borne haute ne peut pas dépasser ta FC max (${maxHr} bpm).`;
+    return {
+      message: `Z5 : la borne haute ne peut pas dépasser ta FC max (${maxHr} bpm).`,
+      zone: zones.length,
+    };
   }
   return null;
 }
@@ -152,7 +171,10 @@ export function validateHeartRate(input: unknown): HeartRateValidation {
   }
 
   const zoneError = zonesError(raw.zones, restingHr, maxHr);
-  if (zoneError) errors.zones = zoneError;
+  if (zoneError) {
+    errors.zones = zoneError.message;
+    if (zoneError.zone) errors.zone = zoneError.zone;
+  }
 
   if (Object.keys(errors).length > 0) return { ok: false, errors };
   return {

@@ -4,7 +4,7 @@ import { generateSignedCookie } from "hono/cookie";
 import { app } from "../index";
 import type { Bindings } from "../env";
 import { resetDatabase } from "../test-db";
-import type { HeartRateResponse } from "./routes";
+import type { HeartRateResponse } from "../../core/heart-rate";
 
 const testEnv: Bindings = { ...env, SESSION_SECRET: "session-secret" };
 const settings = {
@@ -134,6 +134,7 @@ describe("/api/heart-rate-zones", () => {
         restingHr: "Saisis ta FC repos en bpm, entre 30 et 120.",
         zones:
           "Z2 : la borne basse doit être égale à la borne haute de Z1 (134 bpm), sans chevauchement ni trou.",
+        zone: 2,
       },
     });
     expect(await storedRows()).toEqual([]);

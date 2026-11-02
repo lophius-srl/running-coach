@@ -6,11 +6,9 @@ import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import {
   validateHeartRate,
+  type HeartRateResponse,
   type HeartRateSettings,
 } from "../../core/heart-rate";
-
-// Réponse de GET et PUT : null tant que l'utilisateur n'a rien enregistré.
-export type HeartRateResponse = { heartRate: HeartRateSettings | null };
 
 type HeartRateRow = { resting_hr: number; max_hr: number; zones: string };
 

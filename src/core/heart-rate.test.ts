@@ -65,6 +65,7 @@ describe("karvonenZones", () => {
       ok: false,
       errors: {
         zones: "Z1 : la borne basse doit être inférieure à la borne haute.",
+        zone: 1,
       },
     });
   });
@@ -147,6 +148,7 @@ describe("validateHeartRate", () => {
       ok: false,
       errors: {
         zones: "Z3 : saisis les deux bornes en bpm (nombres entiers).",
+        zone: 3,
       },
     });
     const notObject = [...valid.zones.slice(0, 4), null];
@@ -154,6 +156,7 @@ describe("validateHeartRate", () => {
       ok: false,
       errors: {
         zones: "Z5 : saisis les deux bornes en bpm (nombres entiers).",
+        zone: 5,
       },
     });
   });
@@ -164,6 +167,7 @@ describe("validateHeartRate", () => {
       ok: false,
       errors: {
         zones: "Z3 : la borne basse doit être inférieure à la borne haute.",
+        zone: 3,
       },
     });
   });
@@ -177,6 +181,7 @@ describe("validateHeartRate", () => {
       errors: {
         zones:
           "Z2 : la borne basse doit être égale à la borne haute de Z1 (134 bpm), sans chevauchement ni trou.",
+        zone: 2,
       },
     });
   });
@@ -190,6 +195,7 @@ describe("validateHeartRate", () => {
       errors: {
         zones:
           "Z5 : la borne basse doit être égale à la borne haute de Z4 (176 bpm), sans chevauchement ni trou.",
+        zone: 5,
       },
     });
   });
@@ -221,12 +227,14 @@ describe("validateHeartRate", () => {
       errors: {
         zones:
           "Z1 : la borne basse ne peut pas être sous ta FC repos (119 bpm).",
+        zone: 1,
       },
     });
     expect(validateHeartRate({ ...valid, maxHr: 189 })).toEqual({
       ok: false,
       errors: {
         zones: "Z5 : la borne haute ne peut pas dépasser ta FC max (189 bpm).",
+        zone: 5,
       },
     });
   });
