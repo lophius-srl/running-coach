@@ -102,6 +102,22 @@ describe("formatStartDate", () => {
     expect(formatted).toContain("06:05");
   });
 
+  it("shows a summer start in Paris time (UTC+2)", () => {
+    expect(formatStartDate("2026-07-14T05:30:00Z", "Europe/Paris")).toContain(
+      "07:30",
+    );
+  });
+
+  it("follows the October switch to winter time in Paris", () => {
+    // 25 oct. 2026 : 01:00 UTC, retour de UTC+2 à UTC+1.
+    expect(formatStartDate("2026-10-25T00:30:00Z", "Europe/Paris")).toContain(
+      "02:30",
+    );
+    expect(formatStartDate("2026-10-25T06:00:00Z", "Europe/Paris")).toContain(
+      "07:00",
+    );
+  });
+
   it("shows the start in the requested time zone", () => {
     const lateEvening = "2026-10-29T23:30:00Z";
     const utc = formatStartDate(lateEvening, "UTC");

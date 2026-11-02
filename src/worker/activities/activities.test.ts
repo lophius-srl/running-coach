@@ -56,15 +56,15 @@ function insertRun(id: number, userId: number, startDate: string) {
 }
 
 // Niveau tiré d'un 10 km en 40:00 de l'historique importé, et zones cardiaques de Karvonen.
-async function insertLevelAndZones() {
+async function insertLevelAndZones(userId = 1) {
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO imported_activities (user_id, id, start_date, sport_type, distance_m, moving_time_s)
-       VALUES (1, 99, ?, 'Run', 10000, 2400)`,
-    ).bind(daysAgo(10)),
+       VALUES (?, 99, ?, 'Run', 10000, 2400)`,
+    ).bind(userId, daysAgo(10)),
     env.DB.prepare(
-      "INSERT INTO heart_rate_zones (user_id, resting_hr, max_hr, zones) VALUES (1, 50, 190, ?)",
-    ).bind(JSON.stringify(karvonenZones(50, 190))),
+      "INSERT INTO heart_rate_zones (user_id, resting_hr, max_hr, zones) VALUES (?, 50, 190, ?)",
+    ).bind(userId, JSON.stringify(karvonenZones(50, 190))),
   ]);
 }
 
@@ -225,6 +225,33 @@ describe("GET /api/activities", () => {
       vdot: vdot(8000, 2400),
       weekShare: 1,
     });
+  });
+
+  it("ignores the level and heart rate zones of another user", async () => {
+    await insertLevelAndZones(2);
+    await insertRun(10, 1, daysAgo(1));
+
+    const response = await getActivities({ Cookie: await sessionCookie(1) });
+
+    // Le niveau vient de la seule sortie de l'utilisateur 1 (8 km en 40:00), pas du 10 km en
+    // 40:00 de l'utilisateur 2, qui donnerait une autre zone.
+    const ownZone = paceZone(300, vdot(8000, 2400));
+    expect(ownZone).not.toBe(paceZone(300, vdot(10000, 2400)));
+    const body = await response.json<{ runs: Record<string, unknown>[] }>();
+    expect(body.runs[0]).toMatchObject({
+      paceZone: ownZone,
+      heartRateZone: null,
+    });
+  });
+
+  it("does not share the week distance with another user's runs", async () => {
+    await insertRun(10, 1, daysAgo(1));
+    await insertRun(20, 2, daysAgo(1));
+
+    const response = await getActivities({ Cookie: await sessionCookie(1) });
+
+    const body = await response.json<{ runs: Record<string, unknown>[] }>();
+    expect(body.runs[0].weekShare).toBe(1);
   });
 
   it("computes every figure and zone on the fly without writing to the database", async () => {

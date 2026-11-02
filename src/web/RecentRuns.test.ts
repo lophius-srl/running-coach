@@ -210,3 +210,95 @@ describe("RecentRuns elevation gain of the week", () => {
     );
   });
 });
+
+describe("RecentRuns card labels (QA #60)", () => {
+  it.each([
+    ["road", null, "Route"],
+    ["treadmill", "race", 'Tapis</li><li class="badge">Course'],
+    ["road", "long", 'Route</li><li class="badge">Sortie longue'],
+  ] as const)("shows the %s / %s badges", (surface, workout, badges) => {
+    expect(render([run({ surface, workout })])).toContain(
+      `<li class="badge">${badges}</li></ul>`,
+    );
+  });
+
+  it.each([
+    ["recovery", "Récupération"],
+    ["endurance", "Endurance"],
+    ["tempo", "Tempo"],
+    ["above_threshold", "Entre seuil et VMA"],
+    ["vma", "VMA"],
+  ] as const)("names the %s pace zone %s", (paceZone, label) => {
+    expect(runDetails(render([run({ paceZone })]))).toContain(
+      `Zone d&#x27;allure : ${label}`,
+    );
+  });
+
+  it.each([
+    [1, "Z1 · Récupération"],
+    [5, "Z5 · VMA"],
+  ])("names heart rate zone %i %s", (heartRateZone, label) => {
+    expect(runDetails(render([run({ heartRateZone })]))).toContain(
+      `Zone cardiaque : ${label}`,
+    );
+  });
+
+  it("shows a zero pause rather than hiding it", () => {
+    expect(runDetails(render([run({ pauseS: 0 })]))).toContain(
+      "Pauses : 0:00:00",
+    );
+  });
+
+  it("hides zero achievements", () => {
+    expect(runDetails(render([run({ achievementCount: 0 })]))).toEqual([]);
+  });
+});
+
+describe("RecentRuns card name (QA #60)", () => {
+  it("falls back on a default title for a blank name", () => {
+    expect(render([run({ name: "   " })])).toContain(
+      '<h3 class="run-name">Course sans titre</h3>',
+    );
+  });
+
+  it("escapes special characters of the Strava name", () => {
+    const html = render([run({ name: '<img src=x onerror="alert(1)">' })]);
+
+    expect(html).not.toContain("<img");
+    expect(html).toContain("&lt;img src=x");
+  });
+
+  it("names the Strava link after the run for screen readers", () => {
+    expect(render([run({ id: 7, name: "Footing" })])).toContain(
+      '<span class="visually-hidden"> : Footing (nouvel onglet)</span>',
+    );
+  });
+});
+
+describe("RecentRuns card structure (QA #60)", () => {
+  it("renders one list item, one article and one h3 per run", () => {
+    const html = render([run({ id: 1 }), run({ id: 2, name: "Seuil" })]);
+
+    expect(html.match(/<article class="card run-card">/g)).toHaveLength(2);
+    expect(html.match(/<h3 class="run-name">/g)).toHaveLength(2);
+    expect(html).toContain('<ul class="run-cards"><li><article');
+  });
+
+  it("titles each detail group with an h4 under the card heading", () => {
+    const html = render([run({ kudosCount: 1, averageHeartrate: 150 })]);
+
+    expect(html.match(/<h4 class="run-detail-title">/g)).toHaveLength(2);
+  });
+
+  it("keeps every detail pair inside a description list", () => {
+    const html = render([run({ kudosCount: 1, maxHeartrate: 180 })]);
+
+    for (const group of html.match(/<dl class="run-details">.*?<\/dl>/g) ??
+      []) {
+      expect(group).toMatch(
+        /^<dl class="run-details">(<div><dt>[^<]+<\/dt><dd>[^<]+<\/dd><\/div>)+<\/dl>$/,
+      );
+    }
+    expect(html).toContain('<dl class="run-details">');
+  });
+});
