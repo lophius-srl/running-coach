@@ -39,4 +39,14 @@ describe("elevationPerKm", () => {
     expect(elevationPerKm(500, 1000)).toBe(500);
     expect(elevationPerKm(1, 1)).toBe(1000);
   });
+
+  it.each([
+    ["a negative elevation gain", -5, 10000],
+    ["an infinite elevation gain", Infinity, 10000],
+    ["a NaN elevation gain", NaN, 10000],
+    ["an infinite distance", 100, Infinity],
+    ["a NaN distance", 100, NaN],
+  ])("is null for %s", (_label, gain, distance) => {
+    expect(elevationPerKm(gain, distance)).toBeNull();
+  });
 });
