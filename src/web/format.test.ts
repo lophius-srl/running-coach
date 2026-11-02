@@ -1,17 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatAltitudeRange,
   formatDay,
   formatDistance,
   formatDuration,
   formatElevationGain,
   formatElevationPerKm,
   formatHeartrate,
+  formatMetersPerBeat,
   formatPace,
   formatPaceBasis,
   formatPaceRange,
   formatRunName,
+  formatShare,
   formatSpeedRange,
-  formatRunDay,
+  formatVdot,
   formatStartDate,
   localIsoDate,
 } from "./format";
@@ -88,44 +91,6 @@ describe("formatDay", () => {
     expect(formatDay("2021-12-31T23:30:00.000Z", "Europe/Paris")).toBe(
       "1 janvier 2022",
     );
-  });
-});
-
-describe("formatRunDay", () => {
-  it("splits the start day into a short weekday and a short date", () => {
-    expect(formatRunDay("2026-11-02T17:00:00Z", "UTC")).toEqual({
-      weekday: "lun.",
-      day: "2 nov.",
-    });
-  });
-
-  it("uses the requested time zone", () => {
-    const lateEvening = "2026-10-29T23:30:00Z";
-    expect(formatRunDay(lateEvening, "UTC").day).toBe("29 oct.");
-    expect(formatRunDay(lateEvening, "Europe/Paris")).toEqual({
-      weekday: "ven.",
-      day: "30 oct.",
-    });
-  });
-
-  it("uses the longest French month abbreviations (date column width)", () => {
-    expect(formatRunDay("2026-09-30T08:00:00Z", "UTC").day).toBe("30 sept.");
-    expect(formatRunDay("2026-07-29T08:00:00Z", "UTC").day).toBe("29 juil.");
-    expect(formatRunDay("2026-02-28T08:00:00Z", "UTC").day).toBe("28 févr.");
-  });
-
-  it("moves to the next year when the time zone crosses midnight on 31 December", () => {
-    expect(formatRunDay("2026-12-31T23:30:00Z", "Europe/Paris")).toEqual({
-      weekday: "ven.",
-      day: "1 janv.",
-    });
-  });
-
-  it("keeps the local day on the night of the switch to winter time", () => {
-    expect(formatRunDay("2026-10-24T22:30:00Z", "Europe/Paris")).toEqual({
-      weekday: "dim.",
-      day: "25 oct.",
-    });
   });
 });
 
@@ -242,5 +207,24 @@ describe("formatPaceBasis", () => {
     expect(formatPaceBasis(basis, "Europe/Paris")).toBe(
       "d'après ta sortie du 12 oct. : 21,10 km en 1:45:30",
     );
+  });
+});
+
+describe("run detail formats", () => {
+  it("formats the efficiency in metres per beat, to the hundredth", () => {
+    expect(formatMetersPerBeat(1.5234)).toBe("1,52 m/batt.");
+  });
+
+  it("formats the week share as a whole percentage", () => {
+    expect(formatShare(0.337)).toBe("34 %");
+    expect(formatShare(1)).toBe("100 %");
+  });
+
+  it("formats the VDOT to the tenth", () => {
+    expect(formatVdot(47.26)).toBe("47,3");
+  });
+
+  it("formats the altitude range in whole metres, below sea level included", () => {
+    expect(formatAltitudeRange(-12.4, 230.6)).toBe("-12 – 231 m");
   });
 });

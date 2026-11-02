@@ -370,10 +370,6 @@ a {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: start;
   }
-
-  .view-grid-aside {
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  }
 }
 
 /* Colonne de plusieurs sections empilées (allures et zones cardiaques). */
@@ -597,86 +593,152 @@ a {
   }
 }
 
-/* Ratio D+/km : sous-libellé dans les totaux, accolé au D+ dans la ligne d'un run (le point
-   médian y est décoratif : texte alternatif vide). */
+/* Ratio D+/km : sous-libellé sous le D+ (totaux et cartes des sorties). */
 .figure-ratio {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
 }
 
-.run-elevation .figure-ratio::before {
-  content: "· " / "";
-}
+/* Liste dense des séances : une carte, des lignes séparées par un filet. */
 
-/* Listes denses (runs, séances) : une carte, des lignes séparées par un filet. */
-
-.run-list,
 .plan-list {
+  overflow: hidden; /* coins arrondis de la carte respectés par le survol des séances */
   padding: 0;
   list-style: none;
   font-variant-numeric: tabular-nums;
 }
 
-/* Coins arrondis de la carte respectés par le survol des séances. */
-.plan-list {
-  overflow: hidden;
-}
-
-.run-list > li + li,
 .plan-list > li + li {
   border-top: var(--border-width) solid var(--color-border-subtle);
 }
 
-.run-row {
-  display: grid;
-  grid-template-columns: 3.25rem minmax(0, 1fr) auto;
-  grid-template-areas:
-    "day name link"
-    "day figures figures";
-  align-items: baseline;
-  gap: 0 var(--space-3);
-  padding: var(--space-2) var(--space-3);
-}
+/* Cartes des sorties (#60) : une grande carte aérée par run, empilées. */
 
-/* Colonne du jour : « lun. » au-dessus de « 2 nov. ». */
-.run-day {
+.run-cards {
   display: flex;
   flex-direction: column;
-  grid-area: day;
-  align-self: start;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  line-height: 1.45;
+  gap: var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.run-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.run-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
 }
 
 .run-name {
-  overflow: hidden;
-  grid-area: name;
-  font-size: var(--font-size-md);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: var(--font-size-xl);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
 }
 
-.run-row .strava-link {
-  grid-area: link;
-}
-
-.run-figures {
+.run-badges {
   display: flex;
   flex-wrap: wrap;
-  grid-area: figures;
-  gap: 0 var(--space-3);
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  padding: 0;
+  list-style: none;
+}
+
+.badge {
+  padding: 0 var(--space-2);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+/* Chiffres clés de la sortie : mêmes blocs que les totaux, en plus grand, sans cadre. */
+.run-key-figures {
+  margin: 0;
+  padding: 0;
+}
+
+.run-key-figures .key-figure:nth-child(odd) {
+  padding-left: 0;
+}
+
+.run-key-figures .key-figure dd:first-of-type {
+  font-size: var(--font-size-xl);
+}
+
+/* Détails : groupes thématiques séparés par un filet ; grille de 2 colonnes sur mobile, 3 puis
+   4 au-delà. */
+.run-detail-group {
+  padding-top: var(--space-4);
+  border-top: var(--border-width) solid var(--color-border-subtle);
+}
+
+.run-detail-title {
+  margin-bottom: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.run-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+
+.run-details dt {
+  color: var(--color-text-muted);
   font-size: var(--font-size-sm);
 }
 
-.run-figures div:first-child dd {
-  font-weight: 700;
+.run-details dd {
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
-.run-elevation {
-  display: flex;
-  gap: 0 0.35em;
-  white-space: nowrap;
+.run-card .strava-link {
+  align-self: flex-start;
+}
+
+@media (min-width: 480px) {
+  .run-card {
+    padding: var(--space-5) var(--space-6);
+  }
+
+  .run-key-figures {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .run-key-figures .key-figure:nth-child(odd) {
+    padding-left: var(--space-3);
+  }
+
+  .run-key-figures .key-figure:first-child {
+    padding-left: 0;
+  }
+
+  .run-key-figures .key-figure dd:first-of-type {
+    font-size: 1.5rem;
+  }
+
+  .run-details {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .run-details {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 /* Grilles de chiffres (import de l'historique). */

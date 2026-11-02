@@ -1,14 +1,18 @@
 import type { RecentRuns as RecentRunsData } from "../worker/activities/recent";
+import { HEART_RATE_ZONES } from "../core/heart-rate";
 import {
+  formatAltitudeRange,
   formatDistance,
   formatDuration,
   formatElevationGain,
   formatElevationPerKm,
   formatHeartrate,
+  formatMetersPerBeat,
   formatPace,
-  formatRunDay,
   formatRunName,
+  formatShare,
   formatStartDate,
+  formatVdot,
 } from "./format";
 
 // Consignes de marque Strava (https://developers.strava.com/guidelines/) : lien « View on Strava »
@@ -48,60 +52,177 @@ function WeekTotal({ total }: { total: RecentRunsData["total"] }) {
   );
 }
 
-// Une sortie après la colonne du jour : nom et lien Strava, puis chiffres. Le D+ et son ratio
-// forment un bloc insécable, qui passe à la ligne quand la place manque.
-// Les libellés des chiffres sont lus par les lecteurs d'écran ; à l'écran, les unités suffisent.
-function RunRow({ run }: { run: RecentRunsData["runs"][number] }) {
-  const startDate = formatStartDate(run.startDate);
-  const { weekday, day } = formatRunDay(run.startDate);
-  const figures = [
-    ["Distance", formatDistance(run.distanceM)],
-    ["Durée", formatDuration(run.movingTimeS)],
-    ["Allure moyenne", formatPace(run.paceSPerKm)],
-    ["FC moyenne", formatHeartrate(run.averageHeartrate)],
+type Run = RecentRunsData["runs"][number];
+
+const SURFACE_LABELS: Record<Run["surface"], string> = {
+  road: "Route",
+  trail: "Trail",
+  treadmill: "Tapis",
+};
+
+const WORKOUT_LABELS: Record<NonNullable<Run["workout"]>, string> = {
+  race: "Course",
+  long: "Sortie longue",
+  intervals: "Fractionné",
+};
+
+const PACE_ZONE_LABELS: Record<NonNullable<Run["paceZone"]>, string> = {
+  recovery: "Récupération",
+  endurance: "Endurance",
+  tempo: "Tempo",
+  threshold: "Seuil",
+  above_threshold: "Entre seuil et VMA",
+  vma: "VMA",
+};
+
+function heartRateZoneLabel(zone: number): string {
+  const { label, name } = HEART_RATE_ZONES[zone - 1];
+  return `${label} · ${name}`;
+}
+
+const positiveCount = (value: number | null) =>
+  value !== null && value > 0 ? String(value) : null;
+
+type Detail = [label: string, value: string | null];
+
+const known = <T,>(value: T | null, format: (value: T) => string) =>
+  value === null ? null : format(value);
+
+// Détails de la sortie en trois groupes thématiques ; les données absentes seront masquées.
+function runDetails(run: Run): [title: string, details: Detail[]][] {
+  return [
+    [
+      "Allure et effort",
+      [
+        [
+          "Zone d'allure",
+          known(run.paceZone, (zone) => PACE_ZONE_LABELS[zone]),
+        ],
+        ["Allure max", known(run.maxPaceSPerKm, formatPace)],
+        ["Temps total", known(run.elapsedTimeS, formatDuration)],
+        ["Pauses", known(run.pauseS, formatDuration)],
+        ["VDOT", known(run.vdot, formatVdot)],
+        [
+          "Effort relatif",
+          known(run.sufferScore, (s) => String(Math.round(s))),
+        ],
+      ],
+    ],
+    [
+      "Cœur et foulée",
+      [
+        ["FC moyenne", known(run.averageHeartrate, formatHeartrate)],
+        ["FC max", known(run.maxHeartrate, formatHeartrate)],
+        ["Zone cardiaque", known(run.heartRateZone, heartRateZoneLabel)],
+        ["Efficacité", known(run.metersPerBeat, formatMetersPerBeat)],
+        ["Cadence", known(run.cadenceSpm, (spm) => `${spm} pas/min`)],
+      ],
+    ],
+    [
+      "Terrain et semaine",
+      [
+        [
+          "Altitude min – max",
+          run.elevLowM === null || run.elevHighM === null
+            ? null
+            : formatAltitudeRange(run.elevLowM, run.elevHighM),
+        ],
+        ["Part de la semaine", known(run.weekShare, formatShare)],
+        ["Records", positiveCount(run.prCount)],
+        ["Succès", positiveCount(run.achievementCount)],
+        ["Kudos", known(run.kudosCount, String)],
+      ],
+    ],
   ];
+}
+
+function DetailGroup({ title, details }: { title: string; details: Detail[] }) {
+  const shown = details.filter(
+    (detail): detail is [string, string] => detail[1] !== null,
+  );
+  if (shown.length === 0) return null;
   return (
-    <li className="run-row">
-      <time className="run-day" dateTime={run.startDate} title={startDate}>
-        <span>{weekday}</span> <span>{day}</span>
-      </time>
-      <h3 className="run-name" title={formatRunName(run.name)}>
-        {formatRunName(run.name)}
-      </h3>
-      <a
-        className="strava-link"
-        href={`https://www.strava.com/activities/${run.id}`}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        View on Strava
-        <span className="visually-hidden">
-          {` : ${run.name || startDate} (nouvel onglet)`}
-        </span>
-      </a>
-      <dl className="run-figures">
-        {figures.map(([label, value]) => (
+    <section className="run-detail-group">
+      <h4 className="run-detail-title">{title}</h4>
+      <dl className="run-details">
+        {shown.map(([label, value]) => (
           <div key={label}>
-            <dt className="visually-hidden">{label}</dt>
+            <dt>{label}</dt>
             <dd>{value}</dd>
           </div>
         ))}
-        <div className="run-elevation">
-          <dt className="visually-hidden">Dénivelé positif</dt>
-          <dd>
-            {formatElevationGain(run.elevationGainM)}
-            <span aria-hidden="true"> D+</span>
-          </dd>
-          {run.elevationGainM !== null && (
-            <>
-              <dt className="visually-hidden">D+ par km</dt>
-              <dd className="figure-ratio">
-                {formatElevationPerKm(run.elevationPerKm)}
-              </dd>
-            </>
-          )}
-        </div>
       </dl>
+    </section>
+  );
+}
+
+// Une sortie : en-tête (date, nom, badges), quatre chiffres clés, grille de détails, lien Strava.
+function RunCard({ run }: { run: Run }) {
+  const startDate = formatStartDate(run.startDate);
+  const name = formatRunName(run.name);
+  const badges = [
+    SURFACE_LABELS[run.surface],
+    ...(run.workout ? [WORKOUT_LABELS[run.workout]] : []),
+  ];
+  return (
+    <li>
+      <article className="card run-card">
+        <header className="run-card-header">
+          <time className="muted" dateTime={run.startDate}>
+            {startDate}
+          </time>
+          <h3 className="run-name">{name}</h3>
+          <ul className="run-badges" aria-label="Type de sortie">
+            {badges.map((badge) => (
+              <li key={badge} className="badge">
+                {badge}
+              </li>
+            ))}
+          </ul>
+        </header>
+        <dl className="key-figures run-key-figures">
+          <div className="key-figure">
+            <dt>Distance</dt>
+            <dd>{formatDistance(run.distanceM)}</dd>
+          </div>
+          <div className="key-figure">
+            <dt>Durée</dt>
+            <dd>{formatDuration(run.movingTimeS)}</dd>
+          </div>
+          <div className="key-figure">
+            <dt>Allure</dt>
+            <dd>{formatPace(run.paceSPerKm)}</dd>
+          </div>
+          <div className="key-figure">
+            <dt>
+              D+<span className="visually-hidden"> (dénivelé positif)</span>
+            </dt>
+            <dd>{formatElevationGain(run.elevationGainM)}</dd>
+            {run.elevationGainM !== null && (
+              <>
+                <dt className="visually-hidden">D+ par km</dt>
+                <dd className="figure-ratio">
+                  {formatElevationPerKm(run.elevationPerKm)}
+                </dd>
+              </>
+            )}
+          </div>
+        </dl>
+        {runDetails(run).map(([title, details]) => (
+          <DetailGroup key={title} title={title} details={details} />
+        ))}
+        <a
+          className="strava-link"
+          href={`https://www.strava.com/activities/${run.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          View on Strava
+          <span className="visually-hidden">
+            {` : ${run.name || startDate} (nouvel onglet)`}
+          </span>
+        </a>
+      </article>
     </li>
   );
 }
@@ -123,9 +244,9 @@ export function RecentRuns({ data }: { data: RecentRunsData }) {
       ) : (
         <>
           <WeekTotal total={data.total} />
-          <ul className="card run-list">
+          <ul className="run-cards">
             {data.runs.map((run) => (
-              <RunRow key={run.id} run={run} />
+              <RunCard key={run.id} run={run} />
             ))}
           </ul>
         </>
