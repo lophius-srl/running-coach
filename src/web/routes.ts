@@ -1,7 +1,7 @@
-// Routage maison de l'app connectée (issue #50) : trois vues, une URL chacune, sans dépendance.
+// Routage maison de l'app connectée (issues #50, #55) : quatre vues, une URL chacune, sans dépendance.
 // Fonctions pures, testées dans routes.test.ts ; l'historique du navigateur est géré par useRoute.
 
-export type ViewId = "week" | "goal" | "history";
+export type ViewId = "week" | "plan" | "goal" | "history";
 
 export type Route = {
   view: ViewId;
@@ -11,6 +11,7 @@ export type Route = {
 
 export const ROUTES: readonly Route[] = [
   { view: "week", path: "/", label: "Ma semaine" },
+  { view: "plan", path: "/plan", label: "Mon plan" },
   { view: "goal", path: "/objectif", label: "Objectif & allures" },
   { view: "history", path: "/historique", label: "Historique" },
 ];
