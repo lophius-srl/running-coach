@@ -4,6 +4,7 @@ import { generateSignedCookie } from "hono/cookie";
 import { app } from "../index";
 import type { Bindings } from "../env";
 import { resetDatabase } from "../test-db";
+import { loadHeartRate } from "./routes";
 import type { HeartRateResponse } from "../../core/heart-rate";
 
 const testEnv: Bindings = { ...env, SESSION_SECRET: "session-secret" };
@@ -194,6 +195,16 @@ describe("/api/heart-rate-zones", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toHaveProperty("errors");
     expect(await storedRows()).toEqual([]);
+  });
+
+  it("returns null instead of failing when the stored zones are corrupted", async () => {
+    // La contrainte CHECK de la table empêche d'insérer ce JSON : on simule la ligne lue.
+    const row = { resting_hr: 50, max_hr: 190, zones: "[{oops" };
+    const db = {
+      prepare: () => ({ bind: () => ({ first: async () => row }) }),
+    } as unknown as D1Database;
+
+    expect(await loadHeartRate(db, 1)).toBeNull();
   });
 
   it("returns null when the stored zones are no longer valid", async () => {

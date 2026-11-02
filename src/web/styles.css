@@ -597,86 +597,217 @@ a {
   }
 }
 
-/* Ratio D+/km : sous-libellé dans les totaux, accolé au D+ dans la ligne d'un run (le point
-   médian y est décoratif : texte alternatif vide). */
+/* Ratio D+/km : sous-libellé sous le D+ (totaux et cartes des sorties). */
 .figure-ratio {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
 }
 
-.run-elevation .figure-ratio::before {
-  content: "· " / "";
-}
+/* Liste dense des séances : une carte, des lignes séparées par un filet. */
 
-/* Listes denses (runs, séances) : une carte, des lignes séparées par un filet. */
-
-.run-list,
 .plan-list {
+  overflow: hidden; /* coins arrondis de la carte respectés par le survol des séances */
   padding: 0;
   list-style: none;
   font-variant-numeric: tabular-nums;
 }
 
-/* Coins arrondis de la carte respectés par le survol des séances. */
-.plan-list {
-  overflow: hidden;
-}
-
-.run-list > li + li,
 .plan-list > li + li {
   border-top: var(--border-width) solid var(--color-border-subtle);
 }
 
-.run-row {
-  display: grid;
-  grid-template-columns: 3.25rem minmax(0, 1fr) auto;
-  grid-template-areas:
-    "day name link"
-    "day figures figures";
-  align-items: baseline;
-  gap: 0 var(--space-3);
-  padding: var(--space-2) var(--space-3);
-}
+/* Cartes des sorties (#60) : une carte sobre par run, le détail dans un volet replié. La mise
+   en page suit la largeur de la carte (container query), pas celle de l'écran. */
 
-/* Colonne du jour : « lun. » au-dessus de « 2 nov. ». */
-.run-day {
+.run-cards {
   display: flex;
   flex-direction: column;
-  grid-area: day;
-  align-self: start;
+  gap: var(--space-3);
+  padding: 0;
+  list-style: none;
+}
+
+.run-card {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-1);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Date et badges sur la première ligne, nom en dessous (le h3 vient d'abord dans le DOM). */
+.run-card-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "date badges"
+    "name name";
+  align-items: center;
+  gap: 0.125rem var(--space-2);
+}
+
+.run-date {
+  grid-area: date;
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
-  line-height: 1.45;
 }
 
 .run-name {
   overflow: hidden;
   grid-area: name;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-lg);
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.run-row .strava-link {
-  grid-area: link;
-}
-
-.run-figures {
+.run-badges {
   display: flex;
   flex-wrap: wrap;
-  grid-area: figures;
-  gap: 0 var(--space-3);
+  justify-content: flex-end;
+  grid-area: badges;
+  gap: var(--space-1);
+  padding: 0;
+  list-style: none;
+}
+
+.badge {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+/* Cinq chiffres clés : 3 + 2 sur une carte étroite, une seule rangée au-delà. */
+.run-figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+
+/* Valeur en haut, libellé dessous ; pour le D+, le ratio suit le libellé : « D+ · 29 m/km ». */
+.run-figure {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: start;
+  align-content: start;
+  column-gap: 0.3em;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+}
+
+.run-figure dd:first-of-type {
+  grid-row: 1;
+  grid-column: 1 / -1;
+  color: var(--color-text);
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.run-figure .figure-ratio::before {
+  content: "· ";
+  content: "· " / "";
+}
+
+@container (min-width: 28rem) {
+  .run-figures {
+    grid-template-columns: repeat(5, auto);
+    justify-content: space-between;
+  }
+}
+
+/* Repères (zone cardiaque, cadence, efficacité) : petites pastilles, libellés lus seulement. */
+.run-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
   font-size: var(--font-size-sm);
 }
 
-.run-figures div:first-child dd {
-  font-weight: 700;
+.run-hints div {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
 }
 
-.run-elevation {
+/* Pied : bouton du volet à gauche, lien Strava à droite, sur un filet discret. */
+.run-card-footer {
   display: flex;
-  gap: 0 0.35em;
-  white-space: nowrap;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  border-top: var(--border-width) solid var(--color-border-subtle);
+}
+
+.run-card-footer .strava-link {
+  margin-block: 0;
+  margin-left: auto;
+}
+
+.run-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--target-size);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Chevron qui pivote à l'ouverture. */
+.run-toggle::after {
+  content: "";
+  width: 0.45em;
+  height: 0.45em;
+  margin-top: -0.2em;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+
+.run-toggle[aria-expanded="true"]::after {
+  margin-top: 0.2em;
+  transform: rotate(-135deg);
+}
+
+/* Panneau juste après son bouton dans le DOM, affiché sous toute la ligne du pied. */
+.run-panel {
+  flex-basis: 100%;
+  order: 1;
+  padding-bottom: var(--space-3);
+}
+
+.run-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2) var(--space-4);
+}
+
+.run-details dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.run-details dd {
+  font-weight: 600;
+}
+
+@container (min-width: 28rem) {
+  .run-details {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 /* Grilles de chiffres (import de l'historique). */

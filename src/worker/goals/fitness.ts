@@ -52,12 +52,13 @@ export function stravaRunSample(payload: string): RunSample | null {
   };
 }
 
-// Courses des 8 dernières semaines (+1 jour de marge), historique importé et API fusionnés.
-export async function loadRuns(
+// Courses des 8 dernières semaines (+1 jour de marge), historique importé et API fusionnés,
+// avec les payloads Strava bruts (lus une seule fois pour le tableau des runs récents).
+export async function loadRunsAndPayloads(
   db: D1Database,
   userId: number,
   nowMs: number,
-): Promise<RunSample[]> {
+): Promise<{ runs: RunSample[]; payloads: string[] }> {
   const since = new Date(
     nowMs - (FITNESS_WINDOW_DAYS + 1) * DAY_MS,
   ).toISOString();
@@ -65,10 +66,22 @@ export async function loadRuns(
     db.prepare(IMPORTED_RUNS).bind(userId, since),
     db.prepare(API_PAYLOADS).bind(userId),
   ]);
-  const apiRuns = (api.results as { payload: string }[])
-    .map((row) => stravaRunSample(row.payload))
-    .filter((run) => run !== null);
-  return mergeRuns(imported.results as RunSample[], apiRuns);
+  const payloads = (api.results as { payload: string }[]).map(
+    (row) => row.payload,
+  );
+  const apiRuns = payloads.map(stravaRunSample).filter((run) => run !== null);
+  return {
+    runs: mergeRuns(imported.results as RunSample[], apiRuns),
+    payloads,
+  };
+}
+
+export async function loadRuns(
+  db: D1Database,
+  userId: number,
+  nowMs: number,
+): Promise<RunSample[]> {
+  return (await loadRunsAndPayloads(db, userId, nowMs)).runs;
 }
 
 export async function loadFitness(

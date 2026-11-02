@@ -57,20 +57,16 @@ export function formatStartDate(iso: string, timeZone?: string): string {
   });
 }
 
-// Jour de départ en deux parties pour la colonne de date des runs : « lun. » et « 2 nov. ».
-export function formatRunDay(
-  iso: string,
+// Départ d'une sortie à l'heure locale du lieu de course : start_date_local de Strava porte un
+// faux suffixe « Z », d'où l'affichage en UTC. À défaut, start_date dans le fuseau du navigateur.
+export function formatRunStart(
+  startDate: string,
+  startDateLocal: string | null,
   timeZone?: string,
-): { weekday: string; day: string } {
-  const date = new Date(iso);
-  return {
-    weekday: date.toLocaleDateString("fr-FR", { weekday: "short", timeZone }),
-    day: date.toLocaleDateString("fr-FR", {
-      day: "numeric",
-      month: "short",
-      timeZone,
-    }),
-  };
+): string {
+  return startDateLocal === null
+    ? formatStartDate(startDate, timeZone)
+    : formatStartDate(startDateLocal, "UTC");
 }
 
 // Fréquence cardiaque moyenne arrondie (« 152 bpm ») ; « – » si la montre ne l'a pas mesurée.
@@ -89,6 +85,30 @@ export function formatElevationGain(elevationGainM: number | null): string {
 export function formatElevationPerKm(elevationPerKm: number | null): string {
   if (elevationPerKm === null) return "–";
   return `${elevationPerKm} m/km`;
+}
+
+function decimal(value: number, digits: number): string {
+  return value.toFixed(digits).replace(".", ",");
+}
+
+// Efficacité en mètres par battement, au centième : « 1,52 m/batt. ».
+export function formatMetersPerBeat(metersPerBeat: number): string {
+  return `${decimal(metersPerBeat, 2)} m/batt.`;
+}
+
+// Part de la semaine en pourcentage entier : 0,337 → « 34 % ».
+export function formatShare(share: number): string {
+  return `${Math.round(share * 100)} %`;
+}
+
+// VDOT au dixième : « 47,3 ».
+export function formatVdot(vdot: number): string {
+  return decimal(vdot, 1);
+}
+
+// Altitudes min et max arrondies au mètre : « 112 – 245 m ».
+export function formatAltitudeRange(lowM: number, highM: number): string {
+  return `${Math.round(lowM)} – ${Math.round(highM)} m`;
 }
 
 // Nom de la course tel que saisi sur Strava ; repli si vide ou fait d'espaces.

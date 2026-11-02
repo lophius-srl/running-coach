@@ -1,17 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatAltitudeRange,
   formatDay,
   formatDistance,
   formatDuration,
   formatElevationGain,
   formatElevationPerKm,
   formatHeartrate,
+  formatMetersPerBeat,
   formatPace,
   formatPaceBasis,
   formatPaceRange,
   formatRunName,
+  formatRunStart,
+  formatShare,
   formatSpeedRange,
-  formatRunDay,
+  formatVdot,
   formatStartDate,
   localIsoDate,
 } from "./format";
@@ -91,50 +95,28 @@ describe("formatDay", () => {
   });
 });
 
-describe("formatRunDay", () => {
-  it("splits the start day into a short weekday and a short date", () => {
-    expect(formatRunDay("2026-11-02T17:00:00Z", "UTC")).toEqual({
-      weekday: "lun.",
-      day: "2 nov.",
-    });
-  });
-
-  it("uses the requested time zone", () => {
-    const lateEvening = "2026-10-29T23:30:00Z";
-    expect(formatRunDay(lateEvening, "UTC").day).toBe("29 oct.");
-    expect(formatRunDay(lateEvening, "Europe/Paris")).toEqual({
-      weekday: "ven.",
-      day: "30 oct.",
-    });
-  });
-
-  it("uses the longest French month abbreviations (date column width)", () => {
-    expect(formatRunDay("2026-09-30T08:00:00Z", "UTC").day).toBe("30 sept.");
-    expect(formatRunDay("2026-07-29T08:00:00Z", "UTC").day).toBe("29 juil.");
-    expect(formatRunDay("2026-02-28T08:00:00Z", "UTC").day).toBe("28 févr.");
-  });
-
-  it("moves to the next year when the time zone crosses midnight on 31 December", () => {
-    expect(formatRunDay("2026-12-31T23:30:00Z", "Europe/Paris")).toEqual({
-      weekday: "ven.",
-      day: "1 janv.",
-    });
-  });
-
-  it("keeps the local day on the night of the switch to winter time", () => {
-    expect(formatRunDay("2026-10-24T22:30:00Z", "Europe/Paris")).toEqual({
-      weekday: "dim.",
-      day: "25 oct.",
-    });
-  });
-});
-
 describe("formatStartDate", () => {
   it("shows the day and time of the start", () => {
     const formatted = formatStartDate("2026-10-29T06:05:00Z", "UTC");
     expect(formatted).toContain("29");
     expect(formatted).toContain("oct");
     expect(formatted).toContain("06:05");
+  });
+
+  it("shows a summer start in Paris time (UTC+2)", () => {
+    expect(formatStartDate("2026-07-14T05:30:00Z", "Europe/Paris")).toContain(
+      "07:30",
+    );
+  });
+
+  it("follows the October switch to winter time in Paris", () => {
+    // 25 oct. 2026 : 01:00 UTC, retour de UTC+2 à UTC+1.
+    expect(formatStartDate("2026-10-25T00:30:00Z", "Europe/Paris")).toContain(
+      "02:30",
+    );
+    expect(formatStartDate("2026-10-25T06:00:00Z", "Europe/Paris")).toContain(
+      "07:00",
+    );
   });
 
   it("shows the start in the requested time zone", () => {
@@ -242,5 +224,43 @@ describe("formatPaceBasis", () => {
     expect(formatPaceBasis(basis, "Europe/Paris")).toBe(
       "d'après ta sortie du 12 oct. : 21,10 km en 1:45:30",
     );
+  });
+});
+
+describe("run detail formats", () => {
+  it("formats the efficiency in metres per beat, to the hundredth", () => {
+    expect(formatMetersPerBeat(1.5234)).toBe("1,52 m/batt.");
+  });
+
+  it("formats the week share as a whole percentage", () => {
+    expect(formatShare(0.337)).toBe("34 %");
+    expect(formatShare(1)).toBe("100 %");
+  });
+
+  it("formats the VDOT to the tenth", () => {
+    expect(formatVdot(47.26)).toBe("47,3");
+  });
+
+  it("formats the altitude range in whole metres, below sea level included", () => {
+    expect(formatAltitudeRange(-12.4, 230.6)).toBe("-12 – 231 m");
+  });
+});
+
+describe("formatRunStart", () => {
+  it("shows the local start time Strava sends with a fake Z suffix as is", () => {
+    // Départ à 15:00 heure de Tokyo, quel que soit le fuseau du navigateur.
+    expect(
+      formatRunStart(
+        "2026-10-29T06:00:00Z",
+        "2026-10-29T15:00:00Z",
+        "Europe/Paris",
+      ),
+    ).toContain("15:00");
+  });
+
+  it("falls back on the UTC start in the requested time zone", () => {
+    expect(
+      formatRunStart("2026-10-29T06:00:00Z", null, "Europe/Paris"),
+    ).toContain("07:00");
   });
 });

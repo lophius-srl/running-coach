@@ -1,14 +1,19 @@
+import { useId, useState } from "react";
 import type { RecentRuns as RecentRunsData } from "../worker/activities/recent";
+import { HEART_RATE_ZONES } from "../core/heart-rate";
 import {
+  formatAltitudeRange,
   formatDistance,
   formatDuration,
   formatElevationGain,
   formatElevationPerKm,
   formatHeartrate,
+  formatMetersPerBeat,
   formatPace,
-  formatRunDay,
   formatRunName,
-  formatStartDate,
+  formatRunStart,
+  formatShare,
+  formatVdot,
 } from "./format";
 
 // Consignes de marque Strava (https://developers.strava.com/guidelines/) : lien « View on Strava »
@@ -48,60 +53,204 @@ function WeekTotal({ total }: { total: RecentRunsData["total"] }) {
   );
 }
 
-// Une sortie après la colonne du jour : nom et lien Strava, puis chiffres. Le D+ et son ratio
-// forment un bloc insécable, qui passe à la ligne quand la place manque.
-// Les libellés des chiffres sont lus par les lecteurs d'écran ; à l'écran, les unités suffisent.
-function RunRow({ run }: { run: RecentRunsData["runs"][number] }) {
-  const startDate = formatStartDate(run.startDate);
-  const { weekday, day } = formatRunDay(run.startDate);
-  const figures = [
+type Run = RecentRunsData["runs"][number];
+
+const SURFACE_LABELS: Record<Run["surface"], string> = {
+  road: "Route",
+  trail: "Trail",
+  treadmill: "Tapis",
+};
+
+const WORKOUT_LABELS: Record<NonNullable<Run["workout"]>, string> = {
+  race: "Compétition",
+  long: "Sortie longue",
+  intervals: "Fractionné",
+};
+
+const PACE_ZONE_LABELS: Record<NonNullable<Run["paceZone"]>, string> = {
+  recovery: "Récupération",
+  endurance: "Endurance",
+  tempo: "Tempo",
+  threshold: "Seuil",
+  above_threshold: "Entre seuil et VMA",
+  vma: "VMA",
+};
+
+function heartRateZoneLabel(zone: number): string {
+  const { label, name } = HEART_RATE_ZONES[zone - 1];
+  return `${label} · ${name}`;
+}
+
+type Detail = [label: string, value: string | null];
+
+const known = <T,>(value: T | null, format: (value: T) => string) =>
+  value === null ? null : format(value);
+
+const positive = <T extends number>(value: T | null) =>
+  value !== null && value > 0 ? value : null;
+
+function shown(details: Detail[]): [string, string][] {
+  return details.filter(
+    (detail): detail is [string, string] => detail[1] !== null,
+  );
+}
+
+// Repères sous les chiffres clés (masqués si absents).
+function runHints(run: Run): Detail[] {
+  return [
+    ["Zone cardiaque", known(run.heartRateZone, heartRateZoneLabel)],
+    ["Cadence", known(run.cadenceSpm, (spm) => `${spm} pas/min`)],
+    ["Efficacité", known(run.metersPerBeat, formatMetersPerBeat)],
+  ];
+}
+
+// Contenu du volet « Plus de détails » (données absentes masquées).
+function runDetails(run: Run): Detail[] {
+  return [
+    ["Zone d'allure", known(run.paceZone, (zone) => PACE_ZONE_LABELS[zone])],
+    ["Allure max", known(run.maxPaceSPerKm, formatPace)],
+    ["Temps total", known(run.elapsedTimeS, formatDuration)],
+    ["Pauses", known(positive(run.pauseS), formatDuration)],
+    ["FC max", known(run.maxHeartrate, formatHeartrate)],
+    ["VDOT", known(run.vdot, formatVdot)],
+    ["Effort relatif", known(run.sufferScore, (s) => String(Math.round(s)))],
+    [
+      "Altitude min – max",
+      run.elevLowM === null || run.elevHighM === null
+        ? null
+        : formatAltitudeRange(run.elevLowM, run.elevHighM),
+    ],
+    ["Part de la semaine", known(run.weekShare, formatShare)],
+    ["Records", known(positive(run.prCount), String)],
+    ["Succès", known(positive(run.achievementCount), String)],
+    ["Kudos", known(run.kudosCount, String)],
+  ];
+}
+
+function RunFigures({ run }: { run: Run }) {
+  const figures: [string, string][] = [
     ["Distance", formatDistance(run.distanceM)],
     ["Durée", formatDuration(run.movingTimeS)],
-    ["Allure moyenne", formatPace(run.paceSPerKm)],
-    ["FC moyenne", formatHeartrate(run.averageHeartrate)],
+    ["Allure", formatPace(run.paceSPerKm)],
   ];
   return (
-    <li className="run-row">
-      <time className="run-day" dateTime={run.startDate} title={startDate}>
-        <span>{weekday}</span> <span>{day}</span>
-      </time>
-      <h3 className="run-name" title={formatRunName(run.name)}>
-        {formatRunName(run.name)}
-      </h3>
-      <a
-        className="strava-link"
-        href={`https://www.strava.com/activities/${run.id}`}
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        View on Strava
-        <span className="visually-hidden">
-          {` : ${run.name || startDate} (nouvel onglet)`}
-        </span>
-      </a>
-      <dl className="run-figures">
-        {figures.map(([label, value]) => (
-          <div key={label}>
-            <dt className="visually-hidden">{label}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-        <div className="run-elevation">
-          <dt className="visually-hidden">Dénivelé positif</dt>
-          <dd>
-            {formatElevationGain(run.elevationGainM)}
-            <span aria-hidden="true"> D+</span>
-          </dd>
-          {run.elevationGainM !== null && (
-            <>
-              <dt className="visually-hidden">D+ par km</dt>
-              <dd className="figure-ratio">
-                {formatElevationPerKm(run.elevationPerKm)}
-              </dd>
-            </>
-          )}
+    <dl className="run-figures">
+      {figures.map(([label, value]) => (
+        <div key={label} className="run-figure">
+          <dt>{label}</dt>
+          <dd>{value}</dd>
         </div>
-      </dl>
+      ))}
+      <div className="run-figure">
+        <dt>
+          D+<span className="visually-hidden"> (dénivelé positif)</span>
+        </dt>
+        <dd>{formatElevationGain(run.elevationGainM)}</dd>
+        {run.elevationGainM !== null && run.elevationPerKm !== null && (
+          <>
+            <dt className="visually-hidden">D+ par km</dt>
+            <dd className="figure-ratio">
+              {formatElevationPerKm(run.elevationPerKm)}
+            </dd>
+          </>
+        )}
+      </div>
+      <div className="run-figure">
+        <dt>FC moy.</dt>
+        <dd>{formatHeartrate(run.averageHeartrate)}</dd>
+      </div>
+    </dl>
+  );
+}
+
+// Liste « libellé : valeur » ; libellés lus seulement par les lecteurs d'écran si hiddenLabels.
+function DetailList({
+  className,
+  details,
+  hiddenLabels = false,
+}: {
+  className: string;
+  details: [string, string][];
+  hiddenLabels?: boolean;
+}) {
+  return (
+    <dl className={className}>
+      {details.map(([label, value]) => (
+        <div key={label}>
+          <dt className={hiddenLabels ? "visually-hidden" : undefined}>
+            {label}
+          </dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+// Une sortie : en-tête (date, nom, badges), cinq chiffres clés, repères, puis un volet replié
+// avec le reste des détails, et le lien Strava toujours visible.
+function RunCard({ run }: { run: Run }) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const startDate = formatRunStart(run.startDate, run.startDateLocal);
+  const name = formatRunName(run.name);
+  const badges = [
+    SURFACE_LABELS[run.surface],
+    ...(run.workout ? [WORKOUT_LABELS[run.workout]] : []),
+  ];
+  const hints = shown(runHints(run));
+  const details = shown(runDetails(run));
+  return (
+    <li>
+      <article className="card run-card">
+        <header className="run-card-header">
+          <h3 className="run-name" title={name}>
+            {name}
+          </h3>
+          <time className="run-date" dateTime={run.startDate}>
+            {startDate}
+          </time>
+          <ul className="run-badges" aria-label="Type de sortie">
+            {badges.map((badge) => (
+              <li key={badge} className="badge">
+                {badge}
+              </li>
+            ))}
+          </ul>
+        </header>
+        <RunFigures run={run} />
+        {hints.length > 0 && (
+          <DetailList className="run-hints" details={hints} hiddenLabels />
+        )}
+        <div className="run-card-footer">
+          {details.length > 0 && (
+            <button
+              type="button"
+              className="run-toggle"
+              aria-expanded={open}
+              aria-controls={panelId}
+              onClick={() => setOpen(!open)}
+            >
+              Plus de détails
+              <span className="visually-hidden">{` : ${name}`}</span>
+            </button>
+          )}
+          {details.length > 0 && (
+            <div id={panelId} className="run-panel" hidden={!open}>
+              <DetailList className="run-details" details={details} />
+            </div>
+          )}
+          <a
+            className="strava-link"
+            href={`https://www.strava.com/activities/${run.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            View on Strava
+            <span className="visually-hidden">{` : ${name} (nouvel onglet)`}</span>
+          </a>
+        </div>
+      </article>
     </li>
   );
 }
@@ -123,9 +272,9 @@ export function RecentRuns({ data }: { data: RecentRunsData }) {
       ) : (
         <>
           <WeekTotal total={data.total} />
-          <ul className="card run-list">
+          <ul className="run-cards">
             {data.runs.map((run) => (
-              <RunRow key={run.id} run={run} />
+              <RunCard key={run.id} run={run} />
             ))}
           </ul>
         </>

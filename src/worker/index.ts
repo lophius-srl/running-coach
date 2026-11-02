@@ -1,9 +1,11 @@
 import { Hono } from "hono";
+import { estimateFitness } from "../core/fitness";
 import { summarizeRecentRuns } from "./activities/recent";
 import { authRoutes } from "./auth/routes";
 import { readSession } from "./auth/session";
+import { loadRunsAndPayloads } from "./goals/fitness";
 import { goalRoutes } from "./goals/routes";
-import { heartRateRoutes } from "./heart-rate/routes";
+import { heartRateRoutes, loadHeartRate } from "./heart-rate/routes";
 import { historyRoutes } from "./history/routes";
 import { planRoutes } from "./plans/routes";
 import type { AppEnv, Bindings } from "./env";
@@ -65,17 +67,19 @@ app.post("/api/sync", async (c) => {
 });
 
 // Tableau de bord : courses des 7 derniers jours de l'utilisateur, sans le payload brut.
+// Runs récents et leurs indicateurs (niveau actuel, zones cardiaques), calculés à la volée.
 app.get("/api/activities", async (c) => {
-  const { results } = await c.env.DB.prepare(
-    "SELECT payload FROM strava_activities WHERE user_id = ? ORDER BY id DESC",
-  )
-    .bind(c.get("userId"))
-    .all<{ payload: string }>();
+  const userId = c.get("userId");
+  const nowMs = Date.now();
+  const [{ runs, payloads }, heartRate] = await Promise.all([
+    loadRunsAndPayloads(c.env.DB, userId, nowMs),
+    loadHeartRate(c.env.DB, userId),
+  ]);
   return c.json(
-    summarizeRecentRuns(
-      results.map((row) => row.payload),
-      Date.now(),
-    ),
+    summarizeRecentRuns(payloads, nowMs, {
+      vdot: estimateFitness(runs, nowMs)?.vdot ?? null,
+      heartRateZones: heartRate?.zones ?? null,
+    }),
   );
 });
 

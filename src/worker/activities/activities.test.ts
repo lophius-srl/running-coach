@@ -9,6 +9,9 @@ import {
   vi,
 } from "vitest";
 import { generateSignedCookie } from "hono/cookie";
+import { karvonenZones } from "../../core/heart-rate";
+import { vdot } from "../../core/paces";
+import { paceZone } from "../../core/run-insights";
 import { app } from "../index";
 import type { Bindings } from "../env";
 import { resetDatabase } from "../test-db";
@@ -50,6 +53,19 @@ function insertRun(id: number, userId: number, startDate: string) {
   )
     .bind(id, userId, JSON.stringify(payload), new Date().toISOString())
     .run();
+}
+
+// Niveau tiré d'un 10 km en 40:00 de l'historique importé, et zones cardiaques de Karvonen.
+async function insertLevelAndZones(userId = 1) {
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO imported_activities (user_id, id, start_date, sport_type, distance_m, moving_time_s)
+       VALUES (?, 99, ?, 'Run', 10000, 2400)`,
+    ).bind(userId, daysAgo(10)),
+    env.DB.prepare(
+      "INSERT INTO heart_rate_zones (user_id, resting_hr, max_hr, zones) VALUES (?, 50, 190, ?)",
+    ).bind(userId, JSON.stringify(karvonenZones(50, 190))),
+  ]);
 }
 
 // Contenu de toutes les tables applicatives, pour vérifier qu'une lecture n'écrit rien.
@@ -103,7 +119,7 @@ describe("GET /api/activities", () => {
       total: unknown;
     }>();
     expect(body.runs.map((run) => run.id)).toEqual([11, 10]);
-    expect(body.runs[0]).toEqual({
+    expect(body.runs[0]).toMatchObject({
       id: 11,
       name: "run 11",
       startDate: recent,
@@ -113,7 +129,10 @@ describe("GET /api/activities", () => {
       averageHeartrate: 150,
       elevationGainM: 120,
       elevationPerKm: 15,
+      surface: "road",
+      weekShare: 0.5,
     });
+    expect(body.runs[0]).not.toHaveProperty("map");
     expect(body.total).toEqual({
       count: 2,
       distanceM: 16000,
@@ -192,13 +211,59 @@ describe("GET /api/activities", () => {
     });
   });
 
-  it("computes the elevation figures on the fly without writing to the database", async () => {
+  it("situates each run against the current level and heart rate zones", async () => {
+    await insertLevelAndZones();
+    await insertRun(10, 1, daysAgo(1));
+
+    const response = await getActivities({ Cookie: await sessionCookie(1) });
+
+    const body = await response.json<{ runs: Record<string, unknown>[] }>();
+    expect(body.runs[0]).toMatchObject({
+      paceZone: paceZone(300, vdot(10000, 2400)),
+      heartRateZone: 3, // 150 bpm dans Z3 (148 – 162) de Karvonen 50 / 190
+      metersPerBeat: 200 / 150,
+      vdot: vdot(8000, 2400),
+      weekShare: 1,
+    });
+  });
+
+  it("ignores the level and heart rate zones of another user", async () => {
+    await insertLevelAndZones(2);
+    await insertRun(10, 1, daysAgo(1));
+
+    const response = await getActivities({ Cookie: await sessionCookie(1) });
+
+    // Le niveau vient de la seule sortie de l'utilisateur 1 (8 km en 40:00), pas du 10 km en
+    // 40:00 de l'utilisateur 2, qui donnerait une autre zone.
+    const ownZone = paceZone(300, vdot(8000, 2400));
+    expect(ownZone).not.toBe(paceZone(300, vdot(10000, 2400)));
+    const body = await response.json<{ runs: Record<string, unknown>[] }>();
+    expect(body.runs[0]).toMatchObject({
+      paceZone: ownZone,
+      heartRateZone: null,
+    });
+  });
+
+  it("does not share the week distance with another user's runs", async () => {
+    await insertRun(10, 1, daysAgo(1));
+    await insertRun(20, 2, daysAgo(1));
+
+    const response = await getActivities({ Cookie: await sessionCookie(1) });
+
+    const body = await response.json<{ runs: Record<string, unknown>[] }>();
+    expect(body.runs[0].weekShare).toBe(1);
+  });
+
+  it("computes every figure and zone on the fly without writing to the database", async () => {
+    await insertLevelAndZones();
     await insertRun(10, 1, daysAgo(1));
     const before = await databaseContent();
 
     const response = await getActivities({ Cookie: await sessionCookie(1) });
 
     expect(response.status).toBe(200);
+    const body = await response.json<{ runs: { paceZone: unknown }[] }>();
+    expect(body.runs[0].paceZone).not.toBeNull();
     expect(await databaseContent()).toEqual(before);
   });
 

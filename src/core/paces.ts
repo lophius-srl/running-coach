@@ -33,7 +33,7 @@ export type PaceInput = {
 // de « Daniels' Running Formula » (3e éd.), non vérifiées sur la source officielle (inaccessible).
 // I 95–100 % (≈ vVO2max, la « VMA ») encadre l'allure I publiée par V.O2 (news.vdoto2.com :
 // semi en 1:50 → ~4:39/km).
-export const ZONE_VDOT_SHARES = {
+const ZONE_VDOT_SHARES = {
   endurance: [0.62, 0.7],
   threshold: [0.86, 0.88],
   vma: [0.95, 1],
@@ -91,6 +91,15 @@ function zone(score: number, [low, high]: readonly [number, number]) {
   };
 }
 
+// Allures publiées (arrondies à la seconde) des zones endurance, seuil et VMA à ce VDOT.
+export function zonePaces(score: number) {
+  return {
+    endurance: zone(score, ZONE_VDOT_SHARES.endurance),
+    threshold: zone(score, ZONE_VDOT_SHARES.threshold),
+    vma: zone(score, ZONE_VDOT_SHARES.vma),
+  };
+}
+
 // 2862 s → « 47:42 », 13 774 s → « 3:49:34 ».
 export function formatTime(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600);
@@ -117,9 +126,7 @@ export function trainingPaces(input: PaceInput): TrainingPaces {
   const racePace =
     (input.targetTimeS ?? predictedTimeS) / (input.distanceM / 1000);
   return {
-    endurance: zone(score, ZONE_VDOT_SHARES.endurance),
-    threshold: zone(score, ZONE_VDOT_SHARES.threshold),
-    vma: zone(score, ZONE_VDOT_SHARES.vma),
+    ...zonePaces(score),
     race: {
       fastSPerKm: Math.round(racePace * (1 - RACE_PACE_MARGIN)),
       slowSPerKm: Math.round(racePace * (1 + RACE_PACE_MARGIN)),
