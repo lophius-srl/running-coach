@@ -31,16 +31,52 @@ describe("paceSecondsPerKm", () => {
 describe("parseRun", () => {
   it("keeps only the displayed fields", () => {
     expect(
-      parseRun(payload({ average_heartrate: 148.3, map: { polyline: "x" } })),
+      parseRun(
+        payload({
+          average_heartrate: 148.3,
+          total_elevation_gain: 245,
+          distance: 8450,
+          map: { polyline: "x" },
+        }),
+      ),
     ).toEqual({
       id: 1,
       name: "Footing",
       startDate: "2026-10-29T06:00:00Z",
-      distanceM: 10000,
+      distanceM: 8450,
       movingTimeS: 3000,
-      paceSPerKm: 300,
+      paceSPerKm: 3000 / 8.45,
       averageHeartrate: 148.3,
+      elevationGainM: 245,
+      elevationPerKm: 29,
     });
+  });
+
+  it("leaves the elevation gain and its ratio empty when Strava has none", () => {
+    for (const raw of [
+      payload({}),
+      payload({ total_elevation_gain: "120" }),
+      payload({ total_elevation_gain: -5 }),
+      payload({ total_elevation_gain: null }),
+    ]) {
+      expect(parseRun(raw)).toMatchObject({
+        elevationGainM: null,
+        elevationPerKm: null,
+      });
+    }
+  });
+
+  it("keeps a zero elevation gain (flat or treadmill run)", () => {
+    expect(parseRun(payload({ total_elevation_gain: 0 }))).toMatchObject({
+      elevationGainM: 0,
+      elevationPerKm: 0,
+    });
+  });
+
+  it("has no elevation ratio for a zero distance", () => {
+    expect(
+      parseRun(payload({ total_elevation_gain: 10, distance: 0 })),
+    ).toMatchObject({ elevationGainM: 10, elevationPerKm: null });
   });
 
   it("leaves the heart rate empty when Strava has none", () => {
@@ -103,6 +139,8 @@ describe("summarizeRecentRuns", () => {
       count: 3,
       distanceM: 25000,
       movingTimeS: 9000,
+      elevationGainM: null,
+      elevationPerKm: null,
     });
   });
 
@@ -166,6 +204,38 @@ describe("summarizeRecentRuns", () => {
       count: 2,
       distanceM: 10000,
       movingTimeS: 3600,
+      elevationGainM: null,
+      elevationPerKm: null,
+    });
+  });
+
+  it("sums the elevation gain and divides it by the total distance", () => {
+    const summary = summarizeRecentRuns(
+      [
+        payload({ id: 1, total_elevation_gain: 245, distance: 8450 }),
+        payload({ id: 2, total_elevation_gain: 0, distance: 10000 }),
+      ],
+      NOW_MS,
+    );
+
+    expect(summary.total).toMatchObject({
+      elevationGainM: 245,
+      elevationPerKm: 13, // 245 m / 18,45 km = 13,3
+    });
+  });
+
+  it("leaves runs without elevation gain out of the overall ratio", () => {
+    const summary = summarizeRecentRuns(
+      [
+        payload({ id: 1, total_elevation_gain: 100, distance: 5000 }),
+        payload({ id: 2, distance: 15000 }),
+      ],
+      NOW_MS,
+    );
+
+    expect(summary.total).toMatchObject({
+      elevationGainM: 100,
+      elevationPerKm: 20,
     });
   });
 
@@ -178,7 +248,13 @@ describe("summarizeRecentRuns", () => {
   it("returns an empty list and zero totals without runs", () => {
     expect(summarizeRecentRuns([], NOW_MS)).toEqual({
       runs: [],
-      total: { count: 0, distanceM: 0, movingTimeS: 0 },
+      total: {
+        count: 0,
+        distanceM: 0,
+        movingTimeS: 0,
+        elevationGainM: null,
+        elevationPerKm: null,
+      },
     });
   });
 });

@@ -42,6 +42,7 @@ function insertRun(id: number, userId: number, startDate: string) {
     distance: 8000,
     moving_time: 2400,
     average_heartrate: 150,
+    total_elevation_gain: 120,
     map: { summary_polyline: "secret" },
   };
   return env.DB.prepare(
@@ -97,11 +98,15 @@ describe("GET /api/activities", () => {
       movingTimeS: 2400,
       paceSPerKm: 300,
       averageHeartrate: 150,
+      elevationGainM: 120,
+      elevationPerKm: 15,
     });
     expect(body.total).toEqual({
       count: 2,
       distanceM: 16000,
       movingTimeS: 4800,
+      elevationGainM: 240,
+      elevationPerKm: 15,
     });
   });
 
@@ -110,7 +115,13 @@ describe("GET /api/activities", () => {
 
     expect(await response.json()).toEqual({
       runs: [],
-      total: { count: 0, distanceM: 0, movingTimeS: 0 },
+      total: {
+        count: 0,
+        distanceM: 0,
+        movingTimeS: 0,
+        elevationGainM: null,
+        elevationPerKm: null,
+      },
     });
   });
 
