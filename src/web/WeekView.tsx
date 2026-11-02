@@ -125,17 +125,15 @@ export function WeekView({ athleteId, goal, sync, syncCount, onSync }: Props) {
         </>
       )}
       <div className="view-grid view-grid-aside">
-        <div className="view-stack">
-          {activities.status === "loading" && (
-            <Loading label="Chargement de tes courses…" />
-          )}
-          {activities.status === "loaded" && (
-            <RecentRuns data={activities.data} />
-          )}
-          {activities.status === "failed" && (
-            <Alert message="Impossible de charger tes courses récentes." />
-          )}
-        </div>
+        {activities.status === "loading" && (
+          <Loading label="Chargement de tes courses…" />
+        )}
+        {activities.status === "loaded" && (
+          <RecentRuns data={activities.data} />
+        )}
+        {activities.status === "failed" && (
+          <Alert message="Impossible de charger tes courses récentes." />
+        )}
         <section aria-labelledby={SUMMARY_HEADING_ID}>
           <h2 id={SUMMARY_HEADING_ID} className="section-title">
             Mes allures

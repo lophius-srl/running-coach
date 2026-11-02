@@ -12,7 +12,8 @@ async function fetchGoal(): Promise<GoalResponse> {
   return (await response.json()) as GoalResponse;
 }
 
-// Objectif et allures, partagés par « Ma semaine » (résumé) et « Objectif & allures ».
+// Objectif et allures, partagés par « Ma semaine » (résumé), « Mon plan » (le plan est relu quand
+// ils changent) et « Objectif & allures ».
 // Rechargés sans écran de chargement à chaque changement de refreshKey (la vue affichée), pour
 // tenir compte d'une synchronisation ou d'un import d'historique fait entre-temps.
 export function useGoal(refreshKey: string) {

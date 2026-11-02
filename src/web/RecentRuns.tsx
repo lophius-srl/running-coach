@@ -52,7 +52,9 @@ function RunRow({ run }: { run: RecentRunsData["runs"][number] }) {
       <time className="run-day" dateTime={run.startDate} title={startDate}>
         <span>{weekday}</span> <span>{day}</span>
       </time>
-      <h3 className="run-name">{formatRunName(run.name)}</h3>
+      <h3 className="run-name" title={formatRunName(run.name)}>
+        {formatRunName(run.name)}
+      </h3>
       <a
         className="strava-link"
         href={`https://www.strava.com/activities/${run.id}`}
