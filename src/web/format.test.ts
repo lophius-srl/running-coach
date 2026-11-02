@@ -12,6 +12,7 @@ import {
   formatPaceBasis,
   formatPaceRange,
   formatRunName,
+  formatRunStart,
   formatShare,
   formatSpeedRange,
   formatVdot,
@@ -242,5 +243,24 @@ describe("run detail formats", () => {
 
   it("formats the altitude range in whole metres, below sea level included", () => {
     expect(formatAltitudeRange(-12.4, 230.6)).toBe("-12 – 231 m");
+  });
+});
+
+describe("formatRunStart", () => {
+  it("shows the local start time Strava sends with a fake Z suffix as is", () => {
+    // Départ à 15:00 heure de Tokyo, quel que soit le fuseau du navigateur.
+    expect(
+      formatRunStart(
+        "2026-10-29T06:00:00Z",
+        "2026-10-29T15:00:00Z",
+        "Europe/Paris",
+      ),
+    ).toContain("15:00");
+  });
+
+  it("falls back on the UTC start in the requested time zone", () => {
+    expect(
+      formatRunStart("2026-10-29T06:00:00Z", null, "Europe/Paris"),
+    ).toContain("07:00");
   });
 });

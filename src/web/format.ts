@@ -57,6 +57,18 @@ export function formatStartDate(iso: string, timeZone?: string): string {
   });
 }
 
+// Départ d'une sortie à l'heure locale du lieu de course : start_date_local de Strava porte un
+// faux suffixe « Z », d'où l'affichage en UTC. À défaut, start_date dans le fuseau du navigateur.
+export function formatRunStart(
+  startDate: string,
+  startDateLocal: string | null,
+  timeZone?: string,
+): string {
+  return startDateLocal === null
+    ? formatStartDate(startDate, timeZone)
+    : formatStartDate(startDateLocal, "UTC");
+}
+
 // Fréquence cardiaque moyenne arrondie (« 152 bpm ») ; « – » si la montre ne l'a pas mesurée.
 export function formatHeartrate(averageHeartrate: number | null): string {
   if (averageHeartrate === null) return "–";

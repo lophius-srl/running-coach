@@ -1,3 +1,4 @@
+import { useId, useState } from "react";
 import type { RecentRuns as RecentRunsData } from "../worker/activities/recent";
 import { HEART_RATE_ZONES } from "../core/heart-rate";
 import {
@@ -10,8 +11,8 @@ import {
   formatMetersPerBeat,
   formatPace,
   formatRunName,
+  formatRunStart,
   formatShare,
-  formatStartDate,
   formatVdot,
 } from "./format";
 
@@ -61,7 +62,7 @@ const SURFACE_LABELS: Record<Run["surface"], string> = {
 };
 
 const WORKOUT_LABELS: Record<NonNullable<Run["workout"]>, string> = {
-  race: "Course",
+  race: "Compétition",
   long: "Sortie longue",
   intervals: "Fractionné",
 };
@@ -80,98 +81,135 @@ function heartRateZoneLabel(zone: number): string {
   return `${label} · ${name}`;
 }
 
-const positiveCount = (value: number | null) =>
-  value !== null && value > 0 ? String(value) : null;
-
 type Detail = [label: string, value: string | null];
 
 const known = <T,>(value: T | null, format: (value: T) => string) =>
   value === null ? null : format(value);
 
-// Détails de la sortie en trois groupes thématiques ; les données absentes seront masquées.
-function runDetails(run: Run): [title: string, details: Detail[]][] {
+const positive = <T extends number>(value: T | null) =>
+  value !== null && value > 0 ? value : null;
+
+function shown(details: Detail[]): [string, string][] {
+  return details.filter(
+    (detail): detail is [string, string] => detail[1] !== null,
+  );
+}
+
+// Repères sous les chiffres clés (masqués si absents).
+function runHints(run: Run): Detail[] {
   return [
-    [
-      "Allure et effort",
-      [
-        [
-          "Zone d'allure",
-          known(run.paceZone, (zone) => PACE_ZONE_LABELS[zone]),
-        ],
-        ["Allure max", known(run.maxPaceSPerKm, formatPace)],
-        ["Temps total", known(run.elapsedTimeS, formatDuration)],
-        ["Pauses", known(run.pauseS, formatDuration)],
-        ["VDOT", known(run.vdot, formatVdot)],
-        [
-          "Effort relatif",
-          known(run.sufferScore, (s) => String(Math.round(s))),
-        ],
-      ],
-    ],
-    [
-      "Cœur et foulée",
-      [
-        ["FC moyenne", known(run.averageHeartrate, formatHeartrate)],
-        ["FC max", known(run.maxHeartrate, formatHeartrate)],
-        ["Zone cardiaque", known(run.heartRateZone, heartRateZoneLabel)],
-        ["Efficacité", known(run.metersPerBeat, formatMetersPerBeat)],
-        ["Cadence", known(run.cadenceSpm, (spm) => `${spm} pas/min`)],
-      ],
-    ],
-    [
-      "Terrain et semaine",
-      [
-        [
-          "Altitude min – max",
-          run.elevLowM === null || run.elevHighM === null
-            ? null
-            : formatAltitudeRange(run.elevLowM, run.elevHighM),
-        ],
-        ["Part de la semaine", known(run.weekShare, formatShare)],
-        ["Records", positiveCount(run.prCount)],
-        ["Succès", positiveCount(run.achievementCount)],
-        ["Kudos", known(run.kudosCount, String)],
-      ],
-    ],
+    ["Zone cardiaque", known(run.heartRateZone, heartRateZoneLabel)],
+    ["Cadence", known(run.cadenceSpm, (spm) => `${spm} pas/min`)],
+    ["Efficacité", known(run.metersPerBeat, formatMetersPerBeat)],
   ];
 }
 
-function DetailGroup({ title, details }: { title: string; details: Detail[] }) {
-  const shown = details.filter(
-    (detail): detail is [string, string] => detail[1] !== null,
-  );
-  if (shown.length === 0) return null;
+// Contenu du volet « Plus de détails » (données absentes masquées).
+function runDetails(run: Run): Detail[] {
+  return [
+    ["Zone d'allure", known(run.paceZone, (zone) => PACE_ZONE_LABELS[zone])],
+    ["Allure max", known(run.maxPaceSPerKm, formatPace)],
+    ["Temps total", known(run.elapsedTimeS, formatDuration)],
+    ["Pauses", known(positive(run.pauseS), formatDuration)],
+    ["FC max", known(run.maxHeartrate, formatHeartrate)],
+    ["VDOT", known(run.vdot, formatVdot)],
+    ["Effort relatif", known(run.sufferScore, (s) => String(Math.round(s)))],
+    [
+      "Altitude min – max",
+      run.elevLowM === null || run.elevHighM === null
+        ? null
+        : formatAltitudeRange(run.elevLowM, run.elevHighM),
+    ],
+    ["Part de la semaine", known(run.weekShare, formatShare)],
+    ["Records", known(positive(run.prCount), String)],
+    ["Succès", known(positive(run.achievementCount), String)],
+    ["Kudos", known(run.kudosCount, String)],
+  ];
+}
+
+function RunFigures({ run }: { run: Run }) {
+  const figures: [string, string][] = [
+    ["Distance", formatDistance(run.distanceM)],
+    ["Durée", formatDuration(run.movingTimeS)],
+    ["Allure", formatPace(run.paceSPerKm)],
+  ];
   return (
-    <section className="run-detail-group">
-      <h4 className="run-detail-title">{title}</h4>
-      <dl className="run-details">
-        {shown.map(([label, value]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
-    </section>
+    <dl className="run-figures">
+      {figures.map(([label, value]) => (
+        <div key={label} className="run-figure">
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+      <div className="run-figure">
+        <dt>
+          D+<span className="visually-hidden"> (dénivelé positif)</span>
+        </dt>
+        <dd>{formatElevationGain(run.elevationGainM)}</dd>
+        {run.elevationGainM !== null && run.elevationPerKm !== null && (
+          <>
+            <dt className="visually-hidden">D+ par km</dt>
+            <dd className="figure-ratio">
+              {formatElevationPerKm(run.elevationPerKm)}
+            </dd>
+          </>
+        )}
+      </div>
+      <div className="run-figure">
+        <dt>FC moy.</dt>
+        <dd>{formatHeartrate(run.averageHeartrate)}</dd>
+      </div>
+    </dl>
   );
 }
 
-// Une sortie : en-tête (date, nom, badges), quatre chiffres clés, grille de détails, lien Strava.
+// Liste « libellé : valeur » ; libellés lus seulement par les lecteurs d'écran si hiddenLabels.
+function DetailList({
+  className,
+  details,
+  hiddenLabels = false,
+}: {
+  className: string;
+  details: [string, string][];
+  hiddenLabels?: boolean;
+}) {
+  return (
+    <dl className={className}>
+      {details.map(([label, value]) => (
+        <div key={label}>
+          <dt className={hiddenLabels ? "visually-hidden" : undefined}>
+            {label}
+          </dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+// Une sortie : en-tête (date, nom, badges), cinq chiffres clés, repères, puis un volet replié
+// avec le reste des détails, et le lien Strava toujours visible.
 function RunCard({ run }: { run: Run }) {
-  const startDate = formatStartDate(run.startDate);
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const startDate = formatRunStart(run.startDate, run.startDateLocal);
   const name = formatRunName(run.name);
   const badges = [
     SURFACE_LABELS[run.surface],
     ...(run.workout ? [WORKOUT_LABELS[run.workout]] : []),
   ];
+  const hints = shown(runHints(run));
+  const details = shown(runDetails(run));
   return (
     <li>
       <article className="card run-card">
         <header className="run-card-header">
-          <time className="muted" dateTime={run.startDate}>
+          <h3 className="run-name" title={name}>
+            {name}
+          </h3>
+          <time className="run-date" dateTime={run.startDate}>
             {startDate}
           </time>
-          <h3 className="run-name">{name}</h3>
           <ul className="run-badges" aria-label="Type de sortie">
             {badges.map((badge) => (
               <li key={badge} className="badge">
@@ -180,48 +218,37 @@ function RunCard({ run }: { run: Run }) {
             ))}
           </ul>
         </header>
-        <dl className="key-figures run-key-figures">
-          <div className="key-figure">
-            <dt>Distance</dt>
-            <dd>{formatDistance(run.distanceM)}</dd>
+        <RunFigures run={run} />
+        {hints.length > 0 && (
+          <DetailList className="run-hints" details={hints} hiddenLabels />
+        )}
+        <div className="run-card-footer">
+          {details.length > 0 && (
+            <button
+              type="button"
+              className="run-toggle"
+              aria-expanded={open}
+              aria-controls={panelId}
+              onClick={() => setOpen(!open)}
+            >
+              Plus de détails
+            </button>
+          )}
+          <a
+            className="strava-link"
+            href={`https://www.strava.com/activities/${run.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            View on Strava
+            <span className="visually-hidden">{` : ${name} (nouvel onglet)`}</span>
+          </a>
+        </div>
+        {details.length > 0 && (
+          <div id={panelId} className="run-panel" hidden={!open}>
+            <DetailList className="run-details" details={details} />
           </div>
-          <div className="key-figure">
-            <dt>Durée</dt>
-            <dd>{formatDuration(run.movingTimeS)}</dd>
-          </div>
-          <div className="key-figure">
-            <dt>Allure</dt>
-            <dd>{formatPace(run.paceSPerKm)}</dd>
-          </div>
-          <div className="key-figure">
-            <dt>
-              D+<span className="visually-hidden"> (dénivelé positif)</span>
-            </dt>
-            <dd>{formatElevationGain(run.elevationGainM)}</dd>
-            {run.elevationGainM !== null && (
-              <>
-                <dt className="visually-hidden">D+ par km</dt>
-                <dd className="figure-ratio">
-                  {formatElevationPerKm(run.elevationPerKm)}
-                </dd>
-              </>
-            )}
-          </div>
-        </dl>
-        {runDetails(run).map(([title, details]) => (
-          <DetailGroup key={title} title={title} details={details} />
-        ))}
-        <a
-          className="strava-link"
-          href={`https://www.strava.com/activities/${run.id}`}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          View on Strava
-          <span className="visually-hidden">
-            {` : ${run.name || startDate} (nouvel onglet)`}
-          </span>
-        </a>
+        )}
       </article>
     </li>
   );

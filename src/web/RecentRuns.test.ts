@@ -12,6 +12,7 @@ function run(fields: Partial<RecentRun>): RecentRun {
     id: 1,
     name: "Footing",
     startDate: "2026-10-29T06:00:00Z",
+    startDateLocal: null,
     distanceM: 10000,
     movingTimeS: 3000,
     paceSPerKm: 300,
@@ -59,64 +60,92 @@ function render(
   return renderToStaticMarkup(createElement(RecentRuns, { data }));
 }
 
-// Le bloc D+ des chiffres clés d'une carte de run (dernier chiffre clé).
-function runElevation(html: string): string {
-  const match =
-    /<dl class="key-figures run-key-figures">.*<div class="key-figure">(.*?)<\/div><\/dl>/.exec(
-      html,
-    );
-  if (!match) throw new Error("bloc D+ absent");
-  return match[1];
+// Un chiffre clé de la carte (bloc .run-figure), par son libellé visible.
+function runFigure(html: string, label: string): string {
+  const figures = html.match(/<div class="run-figure">.*?<\/div>/g) ?? [];
+  const figure = figures.find((block) => block.includes(`<dt>${label}`));
+  if (!figure) throw new Error(`chiffre clé ${label} absent`);
+  return figure;
 }
 
-// Détails d'une carte, en titres de groupe (« # ») et paires « libellé : valeur ».
-function runDetails(html: string): string[] {
-  const start = html.indexOf('<section class="run-detail-group">');
-  if (start === -1) return [];
-  const pattern =
-    /<h4 class="run-detail-title">(.*?)<\/h4>|<dt>(.*?)<\/dt><dd>(.*?)<\/dd>/g;
-  return [...html.slice(start).matchAll(pattern)].map(
-    ([, title, label, value]) => (title ? `# ${title}` : `${label} : ${value}`),
-  );
+// Paires « libellé : valeur » d'une liste de la carte (repères ou volet de détails).
+function pairs(html: string, className: "run-hints" | "run-details") {
+  const match = new RegExp(`<dl class="${className}">(.*?)</dl>`).exec(html);
+  if (!match) return [];
+  return [
+    ...match[1].matchAll(
+      /<dt(?: class="visually-hidden")?>(.*?)<\/dt><dd>(.*?)<\/dd>/g,
+    ),
+  ].map(([, label, value]) => `${label} : ${value}`);
 }
+
+const runDetails = (html: string) => pairs(html, "run-details");
+const runHints = (html: string) => pairs(html, "run-hints");
 
 describe("RecentRuns card of a run", () => {
-  it("shows the start, the name, the type badges and the Strava link", () => {
+  it("shows the name before the start in the DOM, the badges and the Strava link", () => {
     const html = render([
       run({ id: 42, name: "Piste", surface: "trail", workout: "intervals" }),
     ]);
 
     expect(html).toContain(
-      '<time class="muted" dateTime="2026-10-29T06:00:00Z">',
+      '<h3 class="run-name" title="Piste">Piste</h3><time class="run-date" dateTime="2026-10-29T06:00:00Z">',
     );
-    expect(html).toContain('<h3 class="run-name">Piste</h3>');
     expect(html).toContain(
       '<li class="badge">Trail</li><li class="badge">Fractionné</li>',
     );
     expect(html).toContain('href="https://www.strava.com/activities/42"');
   });
 
-  it("shows the four key figures", () => {
-    const html = render([run({ elevationGainM: 245, elevationPerKm: 29 })]);
+  it("shows the local start time Strava sends, whatever the browser time zone", () => {
+    const html = render([
+      run({
+        startDate: "2026-10-29T06:00:00Z",
+        startDateLocal: "2026-10-29T15:00:00Z", // départ à 15 h, heure de Tokyo
+      }),
+    ]);
 
-    expect(html).toContain("<dt>Distance</dt><dd>10,00 km</dd>");
-    expect(html).toContain("<dt>Durée</dt><dd>0:50:00</dd>");
-    expect(html).toContain("<dt>Allure</dt><dd>5:00/km</dd>");
-    expect(runElevation(html)).toContain("<dd>245 m</dd>");
+    expect(html).toMatch(/<time class="run-date"[^>]*>[^<]*15:00<\/time>/);
   });
 
-  it("lists every known detail, formatted", () => {
+  it("shows the five key figures", () => {
+    const html = render([run({ averageHeartrate: 151.6 })]);
+
+    expect(runFigure(html, "Distance")).toContain("<dd>10,00 km</dd>");
+    expect(runFigure(html, "Durée")).toContain("<dd>0:50:00</dd>");
+    expect(runFigure(html, "Allure")).toContain("<dd>5:00/km</dd>");
+    expect(runFigure(html, "FC moy.")).toContain("<dd>152 bpm</dd>");
+  });
+
+  it("shows a dash for a missing mean heart rate", () => {
+    expect(runFigure(render([run({})]), "FC moy.")).toContain("<dd>–</dd>");
+  });
+
+  it("shows the heart rate zone, cadence and efficiency as hints", () => {
+    const html = render([
+      run({ heartRateZone: 2, cadenceSpm: 172, metersPerBeat: 1.5234 }),
+    ]);
+
+    expect(runHints(html)).toEqual([
+      "Zone cardiaque : Z2 · Endurance",
+      "Cadence : 172 pas/min",
+      "Efficacité : 1,52 m/batt.",
+    ]);
+    expect(html).toContain('<dt class="visually-hidden">Cadence</dt>');
+  });
+
+  it("hides the hints when none is known", () => {
+    expect(render([run({})])).not.toContain("run-hints");
+  });
+
+  it("lists the other details in a collapsed panel", () => {
     const html = render([
       run({
         paceZone: "threshold",
         maxPaceSPerKm: 200,
         elapsedTimeS: 3210,
         pauseS: 210,
-        averageHeartrate: 152.4,
         maxHeartrate: 181,
-        heartRateZone: 3,
-        metersPerBeat: 1.5234,
-        cadenceSpm: 172,
         elevLowM: 112.4,
         elevHighM: 245.6,
         vdot: 47.26,
@@ -129,34 +158,36 @@ describe("RecentRuns card of a run", () => {
     ]);
 
     expect(runDetails(html)).toEqual([
-      "# Allure et effort",
       "Zone d&#x27;allure : Seuil",
       "Allure max : 3:20/km",
       "Temps total : 0:53:30",
       "Pauses : 0:03:30",
+      "FC max : 181 bpm",
       "VDOT : 47,3",
       "Effort relatif : 87",
-      "# Cœur et foulée",
-      "FC moyenne : 152 bpm",
-      "FC max : 181 bpm",
-      "Zone cardiaque : Z3 · Tempo",
-      "Efficacité : 1,52 m/batt.",
-      "Cadence : 172 pas/min",
-      "# Terrain et semaine",
       "Altitude min – max : 112 – 246 m",
       "Part de la semaine : 34 %",
       "Records : 2",
       "Succès : 5",
       "Kudos : 0",
     ]);
+    expect(html).toMatch(
+      /<button type="button" class="run-toggle" aria-expanded="false" aria-controls="([^"]+)">Plus de détails<\/button>.*<div id="\1" class="run-panel" hidden="">/,
+    );
   });
 
-  it("hides unknown details, zero records and groups with nothing known", () => {
-    expect(runDetails(render([run({ kudosCount: 3, prCount: 0 })]))).toEqual([
-      "# Terrain et semaine",
-      "Kudos : 3",
-    ]);
-    expect(render([run({})])).not.toContain("run-detail");
+  it("hides unknown details, zero pauses and zero records", () => {
+    expect(
+      runDetails(render([run({ kudosCount: 3, prCount: 0, pauseS: 0 })])),
+    ).toEqual(["Kudos : 3"]);
+  });
+
+  it("drops the panel and its button when no detail is known", () => {
+    const html = render([run({})]);
+
+    expect(html).not.toContain("run-panel");
+    expect(html).not.toContain("run-toggle");
+    expect(html).toContain("View on Strava");
   });
 
   it("hides the altitude when only one bound is known", () => {
@@ -165,28 +196,29 @@ describe("RecentRuns card of a run", () => {
 });
 
 describe("RecentRuns elevation gain of a run", () => {
-  it("shows the elevation gain with its ratio below", () => {
+  it("shows the elevation gain with its ratio after the label", () => {
     const html = render([run({ elevationGainM: 245, elevationPerKm: 29 })]);
 
-    expect(runElevation(html)).toBe(
-      '<dt>D+<span class="visually-hidden"> (dénivelé positif)</span></dt><dd>245 m</dd><dt class="visually-hidden">D+ par km</dt><dd class="figure-ratio">29 m/km</dd>',
+    expect(runFigure(html, "D+")).toBe(
+      '<div class="run-figure"><dt>D+<span class="visually-hidden"> (dénivelé positif)</span></dt><dd>245 m</dd><dt class="visually-hidden">D+ par km</dt><dd class="figure-ratio">29 m/km</dd></div>',
     );
   });
 
   it("shows a dash and no ratio when Strava has no elevation gain", () => {
-    const elevation = runElevation(render([run({})]));
+    const elevation = runFigure(render([run({})]), "D+");
 
     expect(elevation).toContain("<dd>–</dd>");
     expect(elevation).not.toContain("figure-ratio");
   });
 
-  it("shows a dashed ratio for a zero-distance run with elevation gain", () => {
-    const elevation = runElevation(
+  it("shows no ratio for a zero-distance run with elevation gain", () => {
+    const elevation = runFigure(
       render([run({ distanceM: 0, elevationGainM: 4, elevationPerKm: null })]),
+      "D+",
     );
 
     expect(elevation).toContain("<dd>4 m</dd>");
-    expect(elevation).toContain('<dd class="figure-ratio">–</dd>');
+    expect(elevation).not.toContain("figure-ratio");
   });
 });
 
@@ -214,7 +246,7 @@ describe("RecentRuns elevation gain of the week", () => {
 describe("RecentRuns card labels (QA #60)", () => {
   it.each([
     ["road", null, "Route"],
-    ["treadmill", "race", 'Tapis</li><li class="badge">Course'],
+    ["treadmill", "race", 'Tapis</li><li class="badge">Compétition'],
     ["road", "long", 'Route</li><li class="badge">Sortie longue'],
   ] as const)("shows the %s / %s badges", (surface, workout, badges) => {
     expect(render([run({ surface, workout })])).toContain(
@@ -238,14 +270,8 @@ describe("RecentRuns card labels (QA #60)", () => {
     [1, "Z1 · Récupération"],
     [5, "Z5 · VMA"],
   ])("names heart rate zone %i %s", (heartRateZone, label) => {
-    expect(runDetails(render([run({ heartRateZone })]))).toContain(
+    expect(runHints(render([run({ heartRateZone })]))).toContain(
       `Zone cardiaque : ${label}`,
-    );
-  });
-
-  it("shows a zero pause rather than hiding it", () => {
-    expect(runDetails(render([run({ pauseS: 0 })]))).toContain(
-      "Pauses : 0:00:00",
     );
   });
 
@@ -257,7 +283,7 @@ describe("RecentRuns card labels (QA #60)", () => {
 describe("RecentRuns card name (QA #60)", () => {
   it("falls back on a default title for a blank name", () => {
     expect(render([run({ name: "   " })])).toContain(
-      '<h3 class="run-name">Course sans titre</h3>',
+      '<h3 class="run-name" title="Course sans titre">Course sans titre</h3>',
     );
   });
 
@@ -268,9 +294,12 @@ describe("RecentRuns card name (QA #60)", () => {
     expect(html).toContain("&lt;img src=x");
   });
 
-  it("names the Strava link after the run for screen readers", () => {
-    expect(render([run({ id: 7, name: "Footing" })])).toContain(
+  it("names the Strava link after the formatted run name for screen readers", () => {
+    expect(render([run({ id: 7, name: "  Footing  " })])).toContain(
       '<span class="visually-hidden"> : Footing (nouvel onglet)</span>',
+    );
+    expect(render([run({ id: 7, name: "" })])).toContain(
+      '<span class="visually-hidden"> : Course sans titre (nouvel onglet)</span>',
     );
   });
 });
@@ -280,25 +309,27 @@ describe("RecentRuns card structure (QA #60)", () => {
     const html = render([run({ id: 1 }), run({ id: 2, name: "Seuil" })]);
 
     expect(html.match(/<article class="card run-card">/g)).toHaveLength(2);
-    expect(html.match(/<h3 class="run-name">/g)).toHaveLength(2);
+    expect(html.match(/<h3 class="run-name"/g)).toHaveLength(2);
     expect(html).toContain('<ul class="run-cards"><li><article');
   });
 
-  it("titles each detail group with an h4 under the card heading", () => {
-    const html = render([run({ kudosCount: 1, averageHeartrate: 150 })]);
+  it("gives each card its own panel id", () => {
+    const html = render([
+      run({ id: 1, kudosCount: 1 }),
+      run({ id: 2, kudosCount: 2 }),
+    ]);
+    const ids = [...html.matchAll(/aria-controls="([^"]+)"/g)].map(
+      ([, id]) => id,
+    );
 
-    expect(html.match(/<h4 class="run-detail-title">/g)).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
   });
 
   it("keeps every detail pair inside a description list", () => {
     const html = render([run({ kudosCount: 1, maxHeartrate: 180 })]);
 
-    for (const group of html.match(/<dl class="run-details">.*?<\/dl>/g) ??
-      []) {
-      expect(group).toMatch(
-        /^<dl class="run-details">(<div><dt>[^<]+<\/dt><dd>[^<]+<\/dd><\/div>)+<\/dl>$/,
-      );
-    }
-    expect(html).toContain('<dl class="run-details">');
+    expect(html).toMatch(
+      /<dl class="run-details">(<div><dt>[^<]+<\/dt><dd>[^<]+<\/dd><\/div>)+<\/dl>/,
+    );
   });
 });

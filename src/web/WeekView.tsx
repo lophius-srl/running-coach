@@ -124,7 +124,7 @@ export function WeekView({ athleteId, goal, sync, syncCount, onSync }: Props) {
           <ConnectWithStrava />
         </>
       )}
-      <div className="view-stack">
+      <div className="view-grid view-grid-aside">
         {activities.status === "loading" && (
           <Loading label="Chargement de tes courses…" />
         )}
