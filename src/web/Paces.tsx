@@ -100,10 +100,12 @@ function PaceDetails({
   return (
     <div className="card paces">
       <p className="muted">
-        Calculées {formatPaceBasis(basis)}, ta meilleure performance des 8
-        dernières semaines. Elle donne ton niveau estimé (VDOT, méthode de Jack
-        Daniels), d'où découle l'allure de chaque zone : elles se mettent à jour
-        dès que tu cours plus vite.
+        Endurance, seuil et VMA découlent de ton niveau estimé (VDOT, méthode de
+        Jack Daniels), calculé {formatPaceBasis(basis)}, ta meilleure course des
+        8 dernières semaines. L'allure course correspond à ton chrono visé, ou à
+        défaut au chrono prédit par ce niveau. Elles évoluent avec tes courses :
+        plus rapides si tu progresses, plus lentes si ta meilleure course sort
+        de la fenêtre.
       </p>
       <dl className="pace-list">
         {ZONES.map(({ key, label, hint }) => {
