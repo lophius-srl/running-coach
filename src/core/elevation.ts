@@ -8,5 +8,6 @@ export function elevationPerKm(
   distanceM: number,
 ): number | null {
   if (elevationGainM === null || distanceM <= 0) return null;
-  return Math.round(elevationGainM / (distanceM / 1000));
+  // Multiplier avant de diviser : 7 m / 0,56 km donne 12,5 et non 12,499…, arrondi à 13.
+  return Math.round((elevationGainM * 1000) / distanceM);
 }
