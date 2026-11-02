@@ -2,6 +2,8 @@ import type { RecentRuns as RecentRunsData } from "../worker/activities/recent";
 import {
   formatDistance,
   formatDuration,
+  formatElevationGain,
+  formatElevationPerKm,
   formatHeartrate,
   formatPace,
   formatRunDay,
@@ -31,12 +33,23 @@ function WeekTotal({ total }: { total: RecentRunsData["total"] }) {
           <dt>Courses</dt>
           <dd>{total.count}</dd>
         </div>
+        <div className="key-figure">
+          <dt>
+            D+<span className="visually-hidden"> (dénivelé positif)</span>
+          </dt>
+          <dd>{formatElevationGain(total.elevationGainM)}</dd>
+          <dt className="visually-hidden">D+ par km</dt>
+          <dd className="figure-ratio">
+            {formatElevationPerKm(total.elevationPerKm)}
+          </dd>
+        </div>
       </dl>
     </>
   );
 }
 
-// Une sortie sur deux lignes, après la colonne du jour : nom et lien Strava, puis chiffres.
+// Une sortie après la colonne du jour : nom et lien Strava, puis chiffres. Le D+ et son ratio
+// forment un bloc insécable, qui passe à la ligne quand la place manque.
 // Les libellés des chiffres sont lus par les lecteurs d'écran ; à l'écran, les unités suffisent.
 function RunRow({ run }: { run: RecentRunsData["runs"][number] }) {
   const startDate = formatStartDate(run.startDate);
@@ -73,6 +86,21 @@ function RunRow({ run }: { run: RecentRunsData["runs"][number] }) {
             <dd>{value}</dd>
           </div>
         ))}
+        <div className="run-elevation">
+          <dt className="visually-hidden">Dénivelé positif</dt>
+          <dd>
+            {formatElevationGain(run.elevationGainM)}
+            <span aria-hidden="true"> D+</span>
+          </dd>
+          {run.elevationGainM !== null && (
+            <>
+              <dt className="visually-hidden">D+ par km</dt>
+              <dd className="figure-ratio">
+                {formatElevationPerKm(run.elevationPerKm)}
+              </dd>
+            </>
+          )}
+        </div>
       </dl>
     </li>
   );
