@@ -269,6 +269,70 @@ describe("parseRun", () => {
   });
 });
 
+describe("parseRun edge cases (QA #60)", () => {
+  it.each([10, 11])("ignores the cycling workout_type %i", (workoutType) => {
+    expect(
+      parseRun(payload({ workout_type: workoutType }))?.workout,
+    ).toBeNull();
+  });
+
+  it.each([1, "yes", null])(
+    "does not treat a non-boolean trainer %o as a treadmill",
+    (trainer) => {
+      expect(parseRun(payload({ sport_type: "Run", trainer }))?.surface).toBe(
+        "road",
+      );
+    },
+  );
+
+  it("falls back on the legacy type when sport_type is missing", () => {
+    expect(parseRun(payload({ type: "TrailRun" }))).toMatchObject({
+      sportType: "TrailRun",
+      surface: "trail",
+    });
+  });
+
+  it("prefers sport_type over the legacy type", () => {
+    expect(
+      parseRun(payload({ sport_type: "VirtualRun", type: "Run" }))?.surface,
+    ).toBe("treadmill");
+  });
+
+  it("reports no pause when elapsed and moving times are equal", () => {
+    expect(parseRun(payload({ elapsed_time: 3000 }))?.pauseS).toBe(0);
+  });
+
+  it("leaves the relative effort empty when suffer_score is null", () => {
+    expect(parseRun(payload({ suffer_score: null }))?.sufferScore).toBeNull();
+  });
+
+  it("keeps a zero kudos count", () => {
+    expect(parseRun(payload({ kudos_count: 0 }))?.kudosCount).toBe(0);
+  });
+
+  it("drops inconsistent altitudes whose low is above the high", () => {
+    expect(parseRun(payload({ elev_low: 230, elev_high: 12 }))).toMatchObject({
+      elevLowM: null,
+      elevHighM: null,
+    });
+  });
+
+  it("keeps a flat run whose low and high altitudes are equal", () => {
+    expect(parseRun(payload({ elev_low: 35, elev_high: 35 }))).toMatchObject({
+      elevLowM: 35,
+      elevHighM: 35,
+    });
+  });
+
+  it("does not expose the map nor any unknown Strava field", () => {
+    const run = parseRun(
+      payload({ map: { summary_polyline: "x" }, athlete: { id: 7 } }),
+    );
+    expect(run).not.toHaveProperty("map");
+    expect(run).not.toHaveProperty("athlete");
+  });
+});
+
 describe("summarizeRecentRuns insights", () => {
   const zones = [
     { low: 100, high: 120 },
@@ -349,6 +413,58 @@ describe("summarizeRecentRuns insights", () => {
     const [run] = summarizeRecentRuns([payload({ distance: 0 })], NOW_MS).runs;
 
     expect(run.weekShare).toBeNull();
+  });
+});
+
+describe("summarizeRecentRuns insights edge cases (QA #60)", () => {
+  it("gives a pace zone to a treadmill run", () => {
+    const [run] = summarizeRecentRuns(
+      [payload({ sport_type: "VirtualRun", moving_time: 3300 })],
+      NOW_MS,
+      { vdot: 50, heartRateZones: null },
+    ).runs;
+
+    expect(run.paceZone).toBe("endurance");
+  });
+
+  it("has no efficiency for a zero-distance run with heart rate", () => {
+    const [run] = summarizeRecentRuns(
+      [payload({ distance: 0, average_heartrate: 150 })],
+      NOW_MS,
+    ).runs;
+
+    expect(run.metersPerBeat).toBeNull();
+  });
+
+  it("gives a zero share to a zero-distance run in a non-empty week", () => {
+    const summary = summarizeRecentRuns(
+      [
+        payload({ id: 1, distance: 0 }),
+        payload({ id: 2, start_date: "2026-10-28T06:00:00Z" }),
+      ],
+      NOW_MS,
+    );
+
+    expect(summary.runs.map((run) => run.weekShare)).toEqual([0, 1]);
+  });
+
+  it("has a VDOT for a run of exactly 3 km and none just below", () => {
+    const summary = summarizeRecentRuns(
+      [
+        payload({ id: 1, sport_type: "Run", distance: 3000, moving_time: 900 }),
+        payload({
+          id: 2,
+          start_date: "2026-10-28T06:00:00Z",
+          sport_type: "Run",
+          distance: 2999,
+          moving_time: 900,
+        }),
+      ],
+      NOW_MS,
+    );
+
+    expect(summary.runs[0].vdot).toBe(vdot(3000, 900));
+    expect(summary.runs[1].vdot).toBeNull();
   });
 });
 

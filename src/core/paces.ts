@@ -45,7 +45,7 @@ export const RACE_PACE_MARGIN = 0.01;
 // Chrono visé plus rapide que la prédiction de plus de 5 % = objectif jugé irréaliste.
 export const UNREALISTIC_TARGET_GAP = 0.05;
 
-export function oxygenCost(speedMPerMin: number): number {
+function oxygenCost(speedMPerMin: number): number {
   return -4.6 + 0.182258 * speedMPerMin + 0.000104 * speedMPerMin ** 2;
 }
 
@@ -91,6 +91,15 @@ function zone(score: number, [low, high]: readonly [number, number]) {
   };
 }
 
+// Allures publiées (arrondies à la seconde) des zones endurance, seuil et VMA à ce VDOT.
+export function zonePaces(score: number) {
+  return {
+    endurance: zone(score, ZONE_VDOT_SHARES.endurance),
+    threshold: zone(score, ZONE_VDOT_SHARES.threshold),
+    vma: zone(score, ZONE_VDOT_SHARES.vma),
+  };
+}
+
 // 2862 s → « 47:42 », 13 774 s → « 3:49:34 ».
 export function formatTime(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600);
@@ -117,9 +126,7 @@ export function trainingPaces(input: PaceInput): TrainingPaces {
   const racePace =
     (input.targetTimeS ?? predictedTimeS) / (input.distanceM / 1000);
   return {
-    endurance: zone(score, ZONE_VDOT_SHARES.endurance),
-    threshold: zone(score, ZONE_VDOT_SHARES.threshold),
-    vma: zone(score, ZONE_VDOT_SHARES.vma),
+    ...zonePaces(score),
     race: {
       fastSPerKm: Math.round(racePace * (1 - RACE_PACE_MARGIN)),
       slowSPerKm: Math.round(racePace * (1 + RACE_PACE_MARGIN)),

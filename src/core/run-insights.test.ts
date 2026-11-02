@@ -46,7 +46,7 @@ describe("heartRateZone", () => {
 
   it.each([
     [100, 1],
-    [119.9, 1],
+    [119.4, 1],
     [120, 2],
     [152, 3],
     [175, 5],
@@ -83,5 +83,68 @@ describe("weekShare", () => {
 
   it("is unknown for an empty week", () => {
     expect(weekShare(0, 0)).toBeNull();
+  });
+});
+
+describe("paceZone at the published pace bounds", () => {
+  // Une sortie courue pile à une borne affichée (arrondie à la seconde) tombe dans la zone affichée.
+  const levels = Array.from({ length: 41 }, (_, index) => 30 + index);
+  const zones = ["endurance", "threshold", "vma"] as const;
+
+  it.each(levels)("matches the displayed ranges at VDOT %i", (level) => {
+    const paces = trainingPaces({
+      distanceM: 10000,
+      targetTimeS: null,
+      vdot: level,
+    });
+    for (const zone of zones) {
+      expect(paceZone(paces[zone].slowSPerKm, level)).toBe(zone);
+      expect(paceZone(paces[zone].fastSPerKm, level)).toBe(zone);
+    }
+  });
+});
+
+describe("heartRateZone at shared bounds", () => {
+  const zones = [
+    { low: 100, high: 120 },
+    { low: 120, high: 140 },
+    { low: 140, high: 160 },
+    { low: 160, high: 175 },
+    { low: 175, high: 190 },
+  ];
+
+  it("puts a heart rate equal to a shared bound in the upper zone", () => {
+    expect(heartRateZone(140, zones)).toBe(3);
+    expect(heartRateZone(160, zones)).toBe(4);
+  });
+
+  it("puts the max heart rate and above in Z5", () => {
+    expect(heartRateZone(190, zones)).toBe(5);
+    expect(heartRateZone(230, zones)).toBe(5);
+  });
+
+  it("classifies the heart rate as displayed, rounded to the bpm", () => {
+    // 139,6 bpm s'affiche « 140 bpm » : la zone doit être celle de 140.
+    expect(heartRateZone(139.6, zones)).toBe(3);
+  });
+
+  it("is unknown just below Z1", () => {
+    expect(heartRateZone(99, zones)).toBeNull();
+  });
+});
+
+describe("metersPerBeat edge cases", () => {
+  it("is unknown for a negative heart rate", () => {
+    expect(metersPerBeat(10000, 3000, -150)).toBeNull();
+  });
+});
+
+describe("weekShare edge cases", () => {
+  it("is zero for a zero-distance run in a non-empty week", () => {
+    expect(weekShare(0, 10000)).toBe(0);
+  });
+
+  it("is one for the only run of the week", () => {
+    expect(weekShare(10000, 10000)).toBe(1);
   });
 });

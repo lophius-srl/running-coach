@@ -37,7 +37,7 @@ export type ParsedRun = {
   maxPaceSPerKm: number | null; // depuis max_speed (m/s)
   maxHeartrate: number | null;
   cadenceSpm: number | null; // pas/min : Strava donne des foulées/min (× 2), arrondi
-  elevLowM: number | null; // altitudes : seules les valeurs non finies sont rejetées
+  elevLowM: number | null; // altitudes : valeurs non finies ou min > max rejetées
   elevHighM: number | null;
   sufferScore: number | null;
   prCount: number | null;
@@ -101,6 +101,13 @@ function surface(sportType: string, trainer: unknown): RunSurface {
   return sportType === "TrailRun" ? "trail" : "road";
 }
 
+// Altitudes min et max ; une paire incohérente (min au-dessus du max) est écartée.
+function altitudeRange(elevLowM: number | null, elevHighM: number | null) {
+  return elevLowM !== null && elevHighM !== null && elevLowM > elevHighM
+    ? { elevLowM: null, elevHighM: null }
+    : { elevLowM, elevHighM };
+}
+
 export function paceSecondsPerKm(
   distanceM: number,
   movingTimeS: number,
@@ -130,6 +137,7 @@ export function parseRun(payload: string): ParsedRun | null {
   const elapsedTimeS = nonNegative(raw.elapsed_time);
   const maxSpeed = positive(raw.max_speed);
   const cadence = positive(raw.average_cadence);
+  const altitudes = altitudeRange(finite(raw.elev_low), finite(raw.elev_high));
   return {
     id: id as number,
     name: typeof name === "string" ? name : "",
@@ -149,8 +157,7 @@ export function parseRun(payload: string): ParsedRun | null {
     cadenceSpm: cadence === null ? null : Math.round(cadence * 2),
     elevationGainM,
     elevationPerKm: elevationPerKm(elevationGainM, distance),
-    elevLowM: finite(raw.elev_low),
-    elevHighM: finite(raw.elev_high),
+    ...altitudes,
     sufferScore: nonNegative(raw.suffer_score),
     prCount: count(raw.pr_count),
     achievementCount: count(raw.achievement_count),
