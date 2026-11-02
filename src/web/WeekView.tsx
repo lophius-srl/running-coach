@@ -7,7 +7,6 @@ import { RecentRuns } from "./RecentRuns";
 import { Alert, ConnectWithStrava, Loading } from "./ui";
 import type { GoalState } from "./useGoal";
 import type { SyncState } from "./useSync";
-import { WeekPlan } from "./WeekPlan";
 
 // Message de suivi (zone role="status") ; l'échec est affiché à part, en alerte.
 function syncMessage(sync: SyncState): string {
@@ -126,18 +125,15 @@ export function WeekView({ athleteId, goal, sync, syncCount, onSync }: Props) {
         </>
       )}
       <div className="view-grid view-grid-aside">
-        <div className="view-stack">
-          <WeekPlan goal={goal} syncCount={syncCount} />
-          {activities.status === "loading" && (
-            <Loading label="Chargement de tes courses…" />
-          )}
-          {activities.status === "loaded" && (
-            <RecentRuns data={activities.data} />
-          )}
-          {activities.status === "failed" && (
-            <Alert message="Impossible de charger tes courses récentes." />
-          )}
-        </div>
+        {activities.status === "loading" && (
+          <Loading label="Chargement de tes courses…" />
+        )}
+        {activities.status === "loaded" && (
+          <RecentRuns data={activities.data} />
+        )}
+        {activities.status === "failed" && (
+          <Alert message="Impossible de charger tes courses récentes." />
+        )}
         <section aria-labelledby={SUMMARY_HEADING_ID}>
           <h2 id={SUMMARY_HEADING_ID} className="section-title">
             Mes allures

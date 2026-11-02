@@ -28,12 +28,18 @@ export function RouteLink({ view, className, current, children }: LinkProps) {
   );
 }
 
-// Pictogrammes décoratifs (24 × 24, trait) : calendrier, cible, histogramme.
+// Pictogrammes décoratifs (24 × 24, trait) : calendrier, liste de séances, cible, histogramme.
 const ICONS: Record<ViewId, ReactNode> = {
   week: (
     <>
       <rect x="3" y="5" width="18" height="16" rx="2" />
       <path d="M3 10h18M8 3v4M16 3v4" />
+    </>
+  ),
+  plan: (
+    <>
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <path d="M8 8h8M8 12h8M8 16h5" />
     </>
   ),
   goal: (
@@ -50,7 +56,7 @@ export function AppNav({ current }: { current: ViewId }) {
   return (
     <nav className="app-nav" aria-label="Navigation principale">
       <ul className="app-nav-list">
-        {ROUTES.map(({ view, label }) => (
+        {ROUTES.map(({ view, label, shortLabel }) => (
           <li key={view}>
             <RouteLink
               view={view}
@@ -65,7 +71,14 @@ export function AppNav({ current }: { current: ViewId }) {
               >
                 {ICONS[view]}
               </svg>
-              {label}
+              {shortLabel ? (
+                <>
+                  <span className="app-nav-label-short">{shortLabel}</span>
+                  <span className="app-nav-label-full">{label}</span>
+                </>
+              ) : (
+                label
+              )}
             </RouteLink>
           </li>
         ))}

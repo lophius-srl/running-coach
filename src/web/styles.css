@@ -25,31 +25,33 @@
   --font-family:
     system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
     sans-serif;
+  /* Échelle resserrée (#55) : texte courant 15 px, jamais sous 14 px. */
   --font-size-sm: 0.875rem;
-  --font-size-md: 1rem;
-  --font-size-lg: 1.25rem;
-  --font-size-xl: 1.5rem;
-  --font-size-figure: 1.75rem;
-  --line-height: 1.5;
+  --font-size-md: 0.9375rem;
+  --font-size-input: 1rem; /* 16 px : évite le zoom automatique d'iOS au focus */
+  --font-size-lg: 1.0625rem;
+  --font-size-xl: 1.25rem;
+  --font-size-figure: 1.25rem;
+  --line-height: 1.45;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
-  --space-4: 1rem;
-  --space-5: 1.5rem;
-  --space-6: 2rem;
+  --space-4: 0.875rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
 
   --radius-sm: 6px;
-  --radius-md: 12px;
+  --radius-md: 8px;
   --border-width: 1px;
-  --accent-width: 4px;
+  --accent-width: 3px;
   --focus-width: 3px;
 
   --target-size: 44px;
   --content-width: 40rem; /* accueil et colonne unique */
-  --app-width: 72rem; /* app connectée sur grand écran */
-  --nav-width: 14rem; /* navigation latérale (desktop) */
-  --tabbar-height: 3.75rem; /* barre d'onglets en bas (mobile) */
+  --app-width: 68rem; /* app connectée sur grand écran */
+  --nav-width: 12rem; /* navigation latérale (desktop) */
+  --tabbar-height: 3.5rem; /* barre d'onglets en bas (mobile) */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -154,19 +156,19 @@ a {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
   border-bottom: var(--border-width) solid var(--color-border-subtle);
 }
 
 .app-title {
-  font-size: var(--font-size-xl);
+  font-size: var(--font-size-lg);
   font-weight: 700;
   line-height: 1.2;
 }
 
 /* Connecté, le titre de la vue (h1) prime sur le nom de l'app. */
 .layout-app .app-title {
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-md);
 }
 
 .view-title {
@@ -180,16 +182,40 @@ a {
 }
 
 .powered-by {
-  width: 180px;
+  width: 150px;
 }
 
 /* Navigation de l'app connectée : onglets en bas (mobile), en haut (tablette), à gauche (desktop). */
 
 .app-nav-list {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   padding: 0;
   list-style: none;
+}
+
+/* Onglets de même hauteur, quelle que soit la longueur du libellé. */
+.app-nav-list > li {
+  display: flex;
+}
+
+.app-nav-link {
+  flex: 1;
+}
+
+/* Libellé court sur la barre du bas (mobile), complet à partir de la tablette. */
+.app-nav-label-full {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .app-nav-label-full {
+    display: inline;
+  }
+
+  .app-nav-label-short {
+    display: none;
+  }
 }
 
 .app-nav-link {
@@ -224,8 +250,8 @@ a {
 
 .app-nav-icon {
   flex: none;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.25rem;
+  height: 1.25rem;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -272,7 +298,6 @@ a {
     gap: var(--space-2);
     min-height: var(--target-size);
     padding: var(--space-2) var(--space-3);
-    font-size: var(--font-size-md);
   }
 
   .app-nav-link[aria-current="page"] {
@@ -324,7 +349,6 @@ a {
     min-height: var(--target-size);
     padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-sm);
-    font-size: var(--font-size-md);
     text-align: left;
   }
 
@@ -367,13 +391,13 @@ a {
 }
 
 .section-title {
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-2);
   font-size: var(--font-size-lg);
+  line-height: 1.3;
 }
 
 .muted,
-.key-figure dt,
-.run-stats dt {
+.key-figure dt {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
 }
@@ -387,7 +411,7 @@ a {
   gap: var(--space-2);
   min-width: var(--target-size);
   min-height: var(--target-size);
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-1) var(--space-4);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
@@ -420,14 +444,18 @@ a {
   height: 48px;
 }
 
-/* « View on Strava » : gras, souligné et orange (consignes Strava). */
+/* « View on Strava » : souligné et orange (consignes Strava), en petit. La zone cliquable
+   déborde de la ligne (marges négatives) pour garder une cible de 44 px sans l'agrandir. */
 .strava-link {
   display: inline-flex;
   align-items: center;
   min-height: var(--target-size);
+  margin-block: calc((1lh - var(--target-size)) / 2);
   color: var(--color-strava-text);
-  font-weight: 700;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
   text-underline-offset: 0.2em;
+  white-space: nowrap;
 }
 
 /* Barre d'actions (synchronisation) */
@@ -450,11 +478,11 @@ a {
 /* États : chargement, vide, erreur */
 
 .state {
-  padding: var(--space-4);
+  padding: var(--space-3) var(--space-4);
 }
 
 .state > * + * {
-  margin-top: var(--space-3);
+  margin-top: var(--space-2);
 }
 
 .state-empty {
@@ -486,7 +514,7 @@ a {
 
 /* Erreur : fond, bordure épaisse et libellé « Erreur » — ne repose pas que sur la couleur. */
 .alert {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-3);
   border: var(--border-width) solid var(--color-error);
   border-left-width: var(--accent-width);
   border-radius: var(--radius-sm);
@@ -498,66 +526,115 @@ a {
   font-weight: 700;
 }
 
-/* Chiffres clés de la semaine */
+/* Chiffres clés de la semaine : une carte, trois valeurs côte à côte. */
 
 .key-figures {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
+  padding: var(--space-2) 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .key-figure {
   display: flex;
   flex-direction: column-reverse;
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-2);
-  border-top: var(--accent-width) solid var(--color-strava);
+  padding: 0 var(--space-3);
+}
+
+.key-figure + .key-figure {
+  border-left: var(--border-width) solid var(--color-border-subtle);
 }
 
 .key-figure dd {
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-lg);
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.3;
   overflow-wrap: break-word;
 }
 
-@media (min-width: 400px) {
+@media (min-width: 480px) {
   .key-figure dd {
-    font-size: var(--font-size-lg);
+    font-size: var(--font-size-figure);
   }
 }
 
-/* Chiffres alignés dans les listes et totaux. */
-.key-figures,
-.run-card {
+/* Listes denses (runs, séances) : une carte, des lignes séparées par un filet. */
+
+.run-list,
+.plan-list {
+  padding: 0;
+  list-style: none;
   font-variant-numeric: tabular-nums;
 }
 
-/* Cartes de runs empilées */
-
-.run-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: 0;
-  list-style: none;
+/* Coins arrondis de la carte respectés par le survol des séances. */
+.plan-list {
+  overflow: hidden;
 }
 
-.run-card {
-  padding: var(--space-4);
+.run-list > li + li,
+.plan-list > li + li {
+  border-top: var(--border-width) solid var(--color-border-subtle);
+}
+
+.run-row {
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr) auto;
+  grid-template-areas:
+    "day name link"
+    "day figures figures";
+  align-items: baseline;
+  gap: 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+}
+
+/* Colonne du jour : « lun. » au-dessus de « 2 nov. ». */
+.run-day {
+  display: flex;
+  flex-direction: column;
+  grid-area: day;
+  align-self: start;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
 }
 
 .run-name {
+  overflow: hidden;
+  grid-area: name;
   font-size: var(--font-size-md);
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+.run-row .strava-link {
+  grid-area: link;
+}
+
+.run-figures {
+  display: flex;
+  flex-wrap: wrap;
+  grid-area: figures;
+  gap: 0 var(--space-3);
+  font-size: var(--font-size-sm);
+}
+
+.run-figures div:first-child dd {
+  font-weight: 700;
+}
+
+/* Grilles de chiffres (import de l'historique). */
 .run-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
-  margin: var(--space-3) 0 var(--space-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.run-stats dt {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
 }
 
 .run-stats dd {
@@ -565,10 +642,6 @@ a {
 }
 
 @media (min-width: 480px) {
-  .key-figure dd {
-    font-size: var(--font-size-figure);
-  }
-
   .run-stats {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -580,14 +653,14 @@ a {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-4);
+  padding: var(--space-3) var(--space-4) var(--space-4);
 }
 
 /* Groupe des champs, désactivé pendant l'enregistrement. */
 .form-fields {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -618,6 +691,7 @@ a {
   background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
+  font-size: var(--font-size-input);
 }
 
 .input[aria-invalid="true"] {
@@ -656,14 +730,14 @@ a {
 .paces {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
 }
 
 .pace-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
   font-variant-numeric: tabular-nums;
 }
 
@@ -672,8 +746,8 @@ a {
   flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--space-1) var(--space-3);
-  padding-bottom: var(--space-3);
+  gap: 0 var(--space-3);
+  padding-bottom: var(--space-2);
   border-bottom: var(--border-width) solid var(--color-border-subtle);
 }
 
@@ -683,7 +757,7 @@ a {
 
 .pace-zone dd {
   margin-left: auto; /* reste à droite quand il passe à la ligne */
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-md);
   font-weight: 700;
   text-align: right;
 }
@@ -699,8 +773,8 @@ a {
 .history-import {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-4);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
 }
 
 .history-help {
@@ -726,76 +800,140 @@ a {
   }
 }
 
-/* Plan de la semaine */
-
-.view-stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
+/* Plan de la semaine (vue « Mon plan ») */
 
 .week-plan {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  max-width: var(--content-width);
 }
 
 .week-plan .section-title {
   margin-bottom: 0;
 }
 
-.plan-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: 0;
+.week-plan .section-title::first-letter,
+.plan-day::first-letter {
+  text-transform: uppercase;
+}
+
+/* Ligne de séance : la ligne entière déplie le descriptif (cible ≥ 44 px).
+   Mobile : type et durée, puis jour et allure ; desktop : une seule ligne en colonnes. */
+.plan-summary {
+  display: grid;
+  position: relative;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "kind duration"
+    "day pace";
+  align-items: baseline;
+  gap: 0 var(--space-3);
+  min-height: var(--target-size);
+  padding: var(--space-2) calc(var(--space-3) + 1.25rem) var(--space-2)
+    var(--space-3);
+  cursor: pointer;
   list-style: none;
 }
 
-.plan-session {
-  padding: var(--space-4);
-  font-variant-numeric: tabular-nums;
+.plan-summary::-webkit-details-marker {
+  display: none;
 }
 
-/* Séance dure : liseré orange, doublé du libellé « Séance dure » (pas que la couleur). */
-.plan-session-hard {
-  border-left: var(--accent-width) solid var(--color-strava);
+/* Chevron : pointe à droite fermé, en bas ouvert. */
+.plan-summary::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: var(--space-3);
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid var(--color-text-muted);
+  border-bottom: 2px solid var(--color-text-muted);
+  transform: translateY(-50%) rotate(-45deg);
 }
 
-.plan-day::first-letter {
-  text-transform: uppercase;
+details[open] > .plan-summary::after {
+  transform: translateY(-75%) rotate(45deg);
+}
+
+.plan-summary:hover {
+  background: var(--color-bg);
+}
+
+.plan-summary:focus-visible {
+  outline-offset: calc(-1 * var(--focus-width));
+}
+
+.plan-day {
+  grid-area: day;
 }
 
 .plan-kind {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--font-size-md);
+  grid-area: kind;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+}
+
+.plan-duration {
+  grid-area: duration;
+  font-weight: 600;
+  text-align: right;
+}
+
+.plan-pace {
+  grid-area: pace;
+  text-align: right;
+}
+
+.plan-day,
+.plan-pace,
+.plan-kind .muted {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+@media (min-width: 768px) {
+  .plan-summary {
+    grid-template-columns: 8.5rem minmax(0, 1fr) auto 8.5rem;
+    grid-template-areas: "day kind duration pace";
+  }
+}
+
+/* Séance dure : liseré orange, doublé du libellé « Séance dure » (pas que la couleur). */
+.plan-session-hard .plan-summary,
+.plan-session-hard .plan-description {
+  box-shadow: inset var(--accent-width) 0 0 var(--color-strava);
 }
 
 .plan-tag {
-  padding: 0 var(--space-2);
+  padding: 0 var(--space-1);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
   font-weight: 600;
+  line-height: 1.3;
 }
 
-@media (min-width: 480px) {
-  .plan-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+.plan-description {
+  padding: 0 var(--space-3) var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+@media (min-width: 768px) {
+  .plan-description {
+    padding-left: calc(8.5rem + 2 * var(--space-3));
   }
 }
 
-.plan-replaced {
-  font-size: var(--font-size-sm);
-  font-weight: 400;
-}
-
-/* Ajustement aux courses récentes (#16) : bandeau sous la phase. */
-.plan-over,
-.plan-adjustment {
+/* Ajustement aux courses récentes (#16) et plan terminé : note sous la phase. */
+.plan-note {
+  padding: var(--space-2) var(--space-3);
   border-left: var(--accent-width) solid var(--color-strava);
-  font-weight: 600;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: var(--font-size-sm);
 }

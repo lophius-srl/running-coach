@@ -92,8 +92,9 @@ function PlanSessions({ plan }: { plan: PlanView }) {
       </p>
     );
   }
+  // Une séance par ligne (jour, type, durée, allure cible) ; le descriptif se déplie au clic.
   return (
-    <ol className="plan-list">
+    <ol className="card plan-list">
       {plan.sessions.map((session) => {
         const hard = HARD_KINDS.has(session.kind);
         const pace = session.targetPace;
@@ -101,33 +102,31 @@ function PlanSessions({ plan }: { plan: PlanView }) {
         return (
           <li
             key={session.date}
-            className={`card plan-session${hard ? " plan-session-hard" : ""}`}
+            className={`plan-session${hard ? " plan-session-hard" : ""}`}
           >
-            <p className="muted plan-day">
-              <time dateTime={session.date}>{formatPlanDay(session.date)}</time>
-            </p>
-            <h3 className="plan-kind">
-              {SESSION_LABELS[session.kind]}
-              {hard && <span className="plan-tag">Séance dure</span>}
-              {replaced && (
-                <span className="muted plan-replaced">{replaced}</span>
-              )}
-            </h3>
-            <dl className="run-stats plan-stats">
-              <div>
-                <dt>Durée</dt>
-                <dd>{formatSessionDuration(session)}</dd>
-              </div>
-              <div>
-                <dt>Allure cible</dt>
-                <dd>
+            <details>
+              <summary className="plan-summary">
+                <time className="plan-day" dateTime={session.date}>
+                  {formatPlanDay(session.date)}
+                </time>{" "}
+                <span className="plan-kind">
+                  <strong>{SESSION_LABELS[session.kind]}</strong>{" "}
+                  {hard && <span className="plan-tag">Séance dure</span>}{" "}
+                  {replaced && <span className="muted">{replaced}</span>}
+                </span>{" "}
+                <span className="plan-duration">
+                  <span className="visually-hidden">Durée : </span>
+                  {formatSessionDuration(session)}
+                </span>{" "}
+                <span className="plan-pace">
+                  <span className="visually-hidden">Allure cible : </span>
                   {pace
                     ? formatPaceRange(pace.fastSPerKm, pace.slowSPerKm)
                     : "–"}
-                </dd>
-              </div>
-            </dl>
-            <p>{session.description}</p>
+                </span>
+              </summary>
+              <p className="plan-description">{session.description}</p>
+            </details>
           </li>
         );
       })}
@@ -147,7 +146,7 @@ function goalKey(goal: GoalState): string | undefined {
   return goal.status === "loaded" ? JSON.stringify(goal.data) : "failed";
 }
 
-// Plan de la semaine : dernier plan enregistré, et bouton pour en générer un nouveau.
+// Vue « Mon plan » : dernier plan enregistré, et bouton pour en générer un nouveau.
 export function WeekPlan({ goal, syncCount }: Props) {
   const [state, setState] = useState<PlanState>({ status: "loading" });
   const [generating, setGenerating] = useState(false);
@@ -201,24 +200,20 @@ export function WeekPlan({ goal, syncCount }: Props) {
   return (
     <section className="week-plan" aria-labelledby={HEADING_ID}>
       <h2 id={HEADING_ID} className="section-title">
-        Mon plan de la semaine
+        {plan ? formatPlanPeriod(plan.weekStart) : "Plan de la semaine"}
       </h2>
       {state.status === "loading" && <Loading label="Chargement du plan…" />}
       {state.status === "failed" && (
         <Alert message="Impossible de charger ton plan." />
       )}
-      {plan && (
-        <p className="muted">
-          {formatPlanPeriod(plan.weekStart)} · {PHASE_LABELS[plan.phase]}
-        </p>
-      )}
+      {plan && <p className="muted">{PHASE_LABELS[plan.phase]}</p>}
       {plan?.adjustment && (
-        <p className="card state plan-adjustment" role="status">
+        <p className="plan-note" role="status">
           {plan.adjustment.reason}
         </p>
       )}
       {over && (
-        <p className="card state plan-over" role="status">
+        <p className="plan-note" role="status">
           Ce plan est terminé : génère ta nouvelle semaine.
         </p>
       )}

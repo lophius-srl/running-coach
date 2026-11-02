@@ -8,6 +8,7 @@ import { ConnectWithStrava, Loading } from "./ui";
 import { useGoal } from "./useGoal";
 import { useRoute } from "./useRoute";
 import { useSync } from "./useSync";
+import { WeekPlan } from "./WeekPlan";
 import { WeekView } from "./WeekView";
 
 type Session =
@@ -24,7 +25,7 @@ async function fetchSession(): Promise<Session> {
 
 type ConnectedProps = { athleteId: number; onLogout: () => void };
 
-// App connectée : trois vues, une URL chacune (voir routes.ts). Démontée à la déconnexion,
+// App connectée : quatre vues, une URL chacune (voir routes.ts). Démontée à la déconnexion,
 // ce qui remet tout son état à zéro.
 function ConnectedApp({ athleteId, onLogout }: ConnectedProps) {
   const view = useRoute();
@@ -69,6 +70,9 @@ function ConnectedApp({ athleteId, onLogout }: ConnectedProps) {
           syncCount={sync.syncCount}
           onSync={sync.synchronize}
         />
+      )}
+      {view === "plan" && (
+        <WeekPlan goal={goal.state} syncCount={sync.syncCount} />
       )}
       {view === "goal" && (
         <GoalView
