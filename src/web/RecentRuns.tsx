@@ -35,9 +35,10 @@ function WeekTotal({ total }: { total: RecentRunsData["total"] }) {
         </div>
         <div className="key-figure">
           <dt>
-            <abbr title="Dénivelé positif">D+</abbr>
+            D+<span className="visually-hidden"> (dénivelé positif)</span>
           </dt>
           <dd>{formatElevationGain(total.elevationGainM)}</dd>
+          <dt className="visually-hidden">D+ par km</dt>
           <dd className="figure-ratio">
             {formatElevationPerKm(total.elevationPerKm)}
           </dd>
@@ -88,12 +89,16 @@ function RunRow({ run }: { run: RecentRunsData["runs"][number] }) {
         <div className="run-elevation">
           <dt className="visually-hidden">Dénivelé positif</dt>
           <dd>
-            {formatElevationGain(run.elevationGainM, { withLabel: true })}
+            {formatElevationGain(run.elevationGainM)}
+            <span aria-hidden="true"> D+</span>
           </dd>
           {run.elevationGainM !== null && (
-            <dd className="figure-ratio">
-              {formatElevationPerKm(run.elevationPerKm)}
-            </dd>
+            <>
+              <dt className="visually-hidden">D+ par km</dt>
+              <dd className="figure-ratio">
+                {formatElevationPerKm(run.elevationPerKm)}
+              </dd>
+            </>
           )}
         </div>
       </dl>

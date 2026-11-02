@@ -155,13 +155,8 @@ describe("formatElevationGain", () => {
     expect(formatElevationGain(0)).toBe("0 m");
   });
 
-  it("can name the figure when no visible label does", () => {
-    expect(formatElevationGain(245, { withLabel: true })).toBe("245 m D+");
-  });
-
   it("shows a dash when Strava has no elevation gain", () => {
     expect(formatElevationGain(null)).toBe("–");
-    expect(formatElevationGain(null, { withLabel: true })).toBe("– D+");
   });
 });
 

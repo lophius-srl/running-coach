@@ -52,15 +52,18 @@ describe("RecentRuns elevation gain of a run", () => {
     const html = render([run({ elevationGainM: 245, elevationPerKm: 29 })]);
 
     expect(runElevation(html)).toBe(
-      '<dt class="visually-hidden">Dénivelé positif</dt><dd>245 m D+</dd><dd class="figure-ratio">29 m/km</dd>',
+      '<dt class="visually-hidden">Dénivelé positif</dt><dd>245 m<span aria-hidden="true"> D+</span></dd><dt class="visually-hidden">D+ par km</dt><dd class="figure-ratio">29 m/km</dd>',
     );
   });
 
   it("shows a dash and no ratio when Strava has no elevation gain", () => {
     const elevation = runElevation(render([run({})]));
 
-    expect(elevation).toContain("<dd>– D+</dd>");
+    expect(elevation).toContain(
+      '<dd>–<span aria-hidden="true"> D+</span></dd>',
+    );
     expect(elevation).not.toContain("figure-ratio");
+    expect(elevation).not.toContain("D+ par km");
   });
 
   it("shows a dashed ratio for a zero-distance run with elevation gain", () => {
@@ -68,14 +71,22 @@ describe("RecentRuns elevation gain of a run", () => {
       render([run({ distanceM: 0, elevationGainM: 4, elevationPerKm: null })]),
     );
 
-    expect(elevation).toContain("<dd>4 m D+</dd>");
+    expect(elevation).toContain(
+      '<dd>4 m<span aria-hidden="true"> D+</span></dd>',
+    );
     expect(elevation).toContain('<dd class="figure-ratio">–</dd>');
   });
 
-  it("names the elevation figure for screen readers", () => {
-    expect(runElevation(render([run({})]))).toContain(
+  it("names the elevation figures for screen readers without repeating D+", () => {
+    const elevation = runElevation(
+      render([run({ elevationGainM: 245, elevationPerKm: 29 })]),
+    );
+
+    expect(elevation).toContain(
       '<dt class="visually-hidden">Dénivelé positif</dt>',
     );
+    expect(elevation).toContain('<dt class="visually-hidden">D+ par km</dt>');
+    expect(elevation).toContain('<span aria-hidden="true"> D+</span>');
   });
 });
 
@@ -87,13 +98,15 @@ describe("RecentRuns elevation gain of the week", () => {
     });
 
     expect(html).toContain(
-      '<dt><abbr title="Dénivelé positif">D+</abbr></dt><dd>245 m</dd><dd class="figure-ratio">13 m/km</dd>',
+      '<dt>D+<span class="visually-hidden"> (dénivelé positif)</span></dt><dd>245 m</dd><dt class="visually-hidden">D+ par km</dt><dd class="figure-ratio">13 m/km</dd>',
     );
   });
 
   it("shows dashes when no run of the week has an elevation gain", () => {
     const html = render([run({})]);
 
-    expect(html).toContain('<dd>–</dd><dd class="figure-ratio">–</dd>');
+    expect(html).toContain(
+      '<dd>–</dd><dt class="visually-hidden">D+ par km</dt><dd class="figure-ratio">–</dd>',
+    );
   });
 });
