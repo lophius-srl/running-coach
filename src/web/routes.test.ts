@@ -27,6 +27,8 @@ describe("viewForPath", () => {
     expect(viewForPath("/inconnu")).toBe("week");
     expect(viewForPath("/objectif/detail")).toBe("week");
     expect(viewForPath("/plan/semaine")).toBe("week");
+    expect(viewForPath("/plans")).toBe("week");
+    expect(viewForPath("/planning")).toBe("week");
     expect(viewForPath("")).toBe("week");
   });
 
@@ -46,6 +48,12 @@ describe("ROUTES", () => {
       ["goal", "/objectif"],
       ["history", "/historique"],
     ]);
+  });
+
+  it("a des chemins canoniques : minuscules, sans barre oblique finale", () => {
+    for (const { path } of ROUTES) {
+      expect(path).toMatch(/^\/[a-z]*$/);
+    }
   });
 
   it("a des chemins et des libellés uniques", () => {

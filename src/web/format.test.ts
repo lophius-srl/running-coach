@@ -105,6 +105,26 @@ describe("formatRunDay", () => {
       day: "30 oct.",
     });
   });
+
+  it("uses the longest French month abbreviations (date column width)", () => {
+    expect(formatRunDay("2026-09-30T08:00:00Z", "UTC").day).toBe("30 sept.");
+    expect(formatRunDay("2026-07-29T08:00:00Z", "UTC").day).toBe("29 juil.");
+    expect(formatRunDay("2026-02-28T08:00:00Z", "UTC").day).toBe("28 févr.");
+  });
+
+  it("moves to the next year when the time zone crosses midnight on 31 December", () => {
+    expect(formatRunDay("2026-12-31T23:30:00Z", "Europe/Paris")).toEqual({
+      weekday: "ven.",
+      day: "1 janv.",
+    });
+  });
+
+  it("keeps the local day on the night of the switch to winter time", () => {
+    expect(formatRunDay("2026-10-24T22:30:00Z", "Europe/Paris")).toEqual({
+      weekday: "dim.",
+      day: "25 oct.",
+    });
+  });
 });
 
 describe("formatStartDate", () => {
