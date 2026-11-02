@@ -32,6 +32,7 @@ describe("D1 migrations", () => {
         "plans",
         "plan_sessions",
         "imported_activities",
+        "heart_rate_zones",
       ]),
     );
   });
@@ -82,6 +83,28 @@ describe("D1 migrations", () => {
       expect.objectContaining({ name: "phase", notnull: 0 }),
     ]);
     expect(duration?.notnull).toBe(0);
+  });
+
+  it("create heart_rate_zones with mandatory columns", async () => {
+    expect(await columns("heart_rate_zones")).toEqual([
+      expect.objectContaining({ name: "user_id" }),
+      expect.objectContaining({ name: "resting_hr", notnull: 1 }),
+      expect.objectContaining({ name: "max_hr", notnull: 1 }),
+      expect.objectContaining({ name: "zones", notnull: 1 }),
+      expect.objectContaining({ name: "updated_at", notnull: 1 }),
+    ]);
+  });
+
+  // Compatibilité N-1 (ADR 0002) : 0005 ne fait qu'ajouter une table, le code précédent
+  // (qui l'ignore) fonctionne donc sans changement sur la nouvelle base.
+  it("add heart_rate_zones without altering existing tables", () => {
+    const migration = env.TEST_MIGRATIONS.find((m) =>
+      m.name.startsWith("0005_"),
+    );
+    expect(migration?.queries).toHaveLength(1);
+    expect(migration?.queries[0]).toMatch(
+      /^\s*(--[^\n]*\n\s*)*CREATE TABLE heart_rate_zones \(/,
+    );
   });
 
   it("are idempotent when applied twice", async () => {

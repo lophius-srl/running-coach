@@ -17,10 +17,18 @@ const HEADING_ID = "paces-title";
 type ZoneKey = "endurance" | "threshold" | "vma" | "race";
 
 export const ZONES: { key: ZoneKey; label: string; hint: string }[] = [
-  { key: "endurance", label: "Endurance", hint: "footing facile, en aisance" },
+  {
+    key: "endurance",
+    label: "Endurance",
+    hint: "footing, sortie longue, récup : en aisance",
+  },
   { key: "threshold", label: "Seuil", hint: "soutenu, tenable environ 1 h" },
   { key: "vma", label: "VMA", hint: "fractionné court, 3 à 5 min" },
-  { key: "race", label: "Allure course", hint: "allure de ton objectif" },
+  {
+    key: "race",
+    label: "Allure course",
+    hint: "allure spécifique de ton objectif",
+  },
 ];
 
 type Props = { paces: TrainingPaces | null; basis: PaceBasis | null };
@@ -92,8 +100,12 @@ function PaceDetails({
   return (
     <div className="card paces">
       <p className="muted">
-        Calculées {formatPaceBasis(basis)}, ta meilleure performance des 8
-        dernières semaines.
+        Endurance, seuil et VMA découlent de ton niveau estimé (VDOT, méthode de
+        Jack Daniels), calculé {formatPaceBasis(basis)}, ta meilleure course des
+        8 dernières semaines. L'allure course correspond à ton chrono visé, ou à
+        défaut au chrono prédit par ce niveau. Elles évoluent avec tes courses :
+        plus rapides si tu progresses, plus lentes si ta meilleure course sort
+        de la fenêtre.
       </p>
       <dl className="pace-list">
         {ZONES.map(({ key, label, hint }) => {

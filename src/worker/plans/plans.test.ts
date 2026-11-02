@@ -198,6 +198,35 @@ describe("/api/plan", () => {
     expect(await (await callPlan(1)).json()).toEqual({ plan });
   });
 
+  it("adds the target heart rate zone of each session once zones are saved", async () => {
+    await saveGoal(1);
+    await importRun(1, 1, 1380);
+    const { plan } = await (await callPlan(1, "POST")).json<PlanResponse>();
+    expect(plan?.sessions.map((s) => s.targetHeartRate)).toEqual([
+      null,
+      null,
+      null,
+    ]);
+
+    const zones = [120, 134, 148, 162, 176].map((low) => ({
+      low,
+      high: low + 14,
+    }));
+    await env.DB.prepare(
+      "INSERT INTO heart_rate_zones (user_id, resting_hr, max_hr, zones) VALUES (1, 50, 190, ?)",
+    )
+      .bind(JSON.stringify(zones))
+      .run();
+    const read = await (await callPlan(1)).json<PlanResponse>();
+    expect(read.plan?.sessions).toMatchObject([
+      { kind: "vma", targetHeartRate: { zone: 5, low: 176, high: 190 } },
+      { kind: "endurance", targetHeartRate: { zone: 2, low: 134, high: 148 } },
+      { kind: "long", targetHeartRate: { zone: 2, low: 134, high: 148 } },
+    ]);
+    // Rien de la zone cardiaque n'est stocké avec le plan.
+    expect(await storedSessions()).toEqual(BASE_SESSIONS);
+  });
+
   it("stores the plan without target paces", async () => {
     await saveGoal(1);
     await importRun(1, 1, 1380);

@@ -12,8 +12,12 @@ const DURABLE_TABLES = [
   "plans",
   "plan_sessions",
   "imported_activities",
+  "heart_rate_zones",
 ];
 const EPHEMERAL_TABLES = ["strava_activities"];
+const ZONES = JSON.stringify(
+  [120, 134, 148, 162, 176].map((low) => ({ low, high: low + 14 })),
+);
 
 function run(sql: string) {
   return env.DB.prepare(sql).run();
@@ -51,6 +55,9 @@ async function seedUserWithEverything() {
     ),
     env.DB.prepare(
       "INSERT INTO imported_activities (user_id, id, start_date, sport_type, distance_m, moving_time_s) VALUES (1, 100, '2021-03-14T07:02:11.000Z', 'Run', 10000, 3000)",
+    ),
+    env.DB.prepare(
+      `INSERT INTO heart_rate_zones (user_id, resting_hr, max_hr, zones) VALUES (1, 50, 190, '${ZONES}')`,
     ),
   ]);
 }
@@ -227,6 +234,48 @@ describe("goals", () => {
     ).first<{ available_days: string }>();
 
     expect(JSON.parse(goal?.available_days ?? "null")).toEqual([]);
+  });
+});
+
+describe("heart_rate_zones", () => {
+  beforeEach(async () => {
+    await run("INSERT INTO users (id, strava_athlete_id) VALUES (1, 42)");
+  });
+
+  function insertZones(restingHr: number, maxHr: number, zones = ZONES) {
+    return env.DB.prepare(
+      "INSERT INTO heart_rate_zones (user_id, resting_hr, max_hr, zones) VALUES (1, ?, ?, ?)",
+    )
+      .bind(restingHr, maxHr, zones)
+      .run();
+  }
+
+  it("accept valid heart rates", async () => {
+    await insertZones(30, 230);
+    expect(await count("heart_rate_zones")).toBe(1);
+  });
+
+  it("allow a single row per user", async () => {
+    await insertZones(50, 190);
+    await expect(insertZones(50, 190)).rejects.toThrow(/UNIQUE|PRIMARY KEY/);
+  });
+
+  it.each([
+    ["resting heart rate too low", 29, 190],
+    ["resting heart rate too high", 121, 190],
+    ["max heart rate too low", 50, 119],
+    ["max heart rate too high", 50, 231],
+    ["resting heart rate not below the max", 120, 120],
+  ])("reject a %s", async (_label, restingHr, maxHr) => {
+    await expect(insertZones(restingHr, maxHr)).rejects.toThrow(/CHECK/);
+  });
+
+  it.each([
+    ["invalid JSON", "not json"],
+    ["four zones", JSON.stringify([1, 2, 3, 4])],
+    ["an object", "{}"],
+  ])("reject zones as %s", async (_label, zones) => {
+    await expect(insertZones(50, 190, zones)).rejects.toThrow(/CHECK|JSON/);
   });
 });
 
