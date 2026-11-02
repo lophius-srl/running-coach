@@ -57,6 +57,22 @@ export function formatStartDate(iso: string, timeZone?: string): string {
   });
 }
 
+// Jour de départ en deux parties pour la colonne de date des runs : « lun. » et « 2 nov. ».
+export function formatRunDay(
+  iso: string,
+  timeZone?: string,
+): { weekday: string; day: string } {
+  const date = new Date(iso);
+  return {
+    weekday: date.toLocaleDateString("fr-FR", { weekday: "short", timeZone }),
+    day: date.toLocaleDateString("fr-FR", {
+      day: "numeric",
+      month: "short",
+      timeZone,
+    }),
+  };
+}
+
 // Fréquence cardiaque moyenne arrondie (« 152 bpm ») ; « – » si la montre ne l'a pas mesurée.
 export function formatHeartrate(averageHeartrate: number | null): string {
   if (averageHeartrate === null) return "–";

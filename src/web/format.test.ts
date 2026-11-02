@@ -9,6 +9,7 @@ import {
   formatPaceRange,
   formatRunName,
   formatSpeedRange,
+  formatRunDay,
   formatStartDate,
   localIsoDate,
 } from "./format";
@@ -85,6 +86,24 @@ describe("formatDay", () => {
     expect(formatDay("2021-12-31T23:30:00.000Z", "Europe/Paris")).toBe(
       "1 janvier 2022",
     );
+  });
+});
+
+describe("formatRunDay", () => {
+  it("splits the start day into a short weekday and a short date", () => {
+    expect(formatRunDay("2026-11-02T17:00:00Z", "UTC")).toEqual({
+      weekday: "lun.",
+      day: "2 nov.",
+    });
+  });
+
+  it("uses the requested time zone", () => {
+    const lateEvening = "2026-10-29T23:30:00Z";
+    expect(formatRunDay(lateEvening, "UTC").day).toBe("29 oct.");
+    expect(formatRunDay(lateEvening, "Europe/Paris")).toEqual({
+      weekday: "ven.",
+      day: "30 oct.",
+    });
   });
 });
 
