@@ -66,6 +66,34 @@ describe("parseRun", () => {
     }
   });
 
+  it("leaves the elevation gain empty when it is not a finite number", () => {
+    const raw = (gain: string) =>
+      `{"id":1,"start_date":"2026-10-29T06:00:00Z","distance":10000,"moving_time":3000,"total_elevation_gain":${gain}}`;
+    for (const gain of [
+      "1e999",
+      "-1e999",
+      "true",
+      "[120]",
+      '{"m":120}',
+      '""',
+    ]) {
+      expect(parseRun(raw(gain))).toMatchObject({
+        elevationGainM: null,
+        elevationPerKm: null,
+      });
+    }
+  });
+
+  it("keeps a fractional elevation gain as Strava sends it", () => {
+    expect(
+      parseRun(payload({ total_elevation_gain: 12.3, distance: 10000 })),
+    ).toMatchObject({ elevationGainM: 12.3, elevationPerKm: 1 });
+  });
+
+  it("still returns the run when only the elevation gain is unusable", () => {
+    expect(parseRun(payload({ total_elevation_gain: "abc" }))?.id).toBe(1);
+  });
+
   it("keeps a zero elevation gain (flat or treadmill run)", () => {
     expect(parseRun(payload({ total_elevation_gain: 0 }))).toMatchObject({
       elevationGainM: 0,
@@ -236,6 +264,67 @@ describe("summarizeRecentRuns", () => {
     expect(summary.total).toMatchObject({
       elevationGainM: 100,
       elevationPerKm: 20,
+    });
+  });
+
+  it("leaves the overall ratio empty when every run with elevation gain has a zero distance", () => {
+    const summary = summarizeRecentRuns(
+      [
+        payload({ id: 1, total_elevation_gain: 30, distance: 0 }),
+        payload({ id: 2, distance: 10000 }),
+      ],
+      NOW_MS,
+    );
+
+    expect(summary.total).toMatchObject({
+      elevationGainM: 30,
+      elevationPerKm: null,
+    });
+  });
+
+  it("adds the elevation gain of a zero-distance run to the overall ratio", () => {
+    const summary = summarizeRecentRuns(
+      [
+        payload({ id: 1, total_elevation_gain: 50, distance: 0 }),
+        payload({ id: 2, total_elevation_gain: 100, distance: 10000 }),
+      ],
+      NOW_MS,
+    );
+
+    expect(summary.total).toMatchObject({
+      elevationGainM: 150,
+      elevationPerKm: 15,
+    });
+  });
+
+  it("computes the overall ratio from the totals, not as a mean of run ratios", () => {
+    const summary = summarizeRecentRuns(
+      [
+        payload({ id: 1, total_elevation_gain: 100, distance: 5000 }), // 20 m/km
+        payload({ id: 2, total_elevation_gain: 0, distance: 15000 }), // 0 m/km
+      ],
+      NOW_MS,
+    );
+
+    expect(summary.total.elevationPerKm).toBe(5); // et non 10
+  });
+
+  it("leaves the elevation gain of runs older than 7 days out of the totals", () => {
+    const summary = summarizeRecentRuns(
+      [
+        payload({ id: 1, total_elevation_gain: 100 }),
+        payload({
+          id: 2,
+          total_elevation_gain: 900,
+          start_date: "2026-10-20T06:00:00Z",
+        }),
+      ],
+      NOW_MS,
+    );
+
+    expect(summary.total).toMatchObject({
+      elevationGainM: 100,
+      elevationPerKm: 10,
     });
   });
 

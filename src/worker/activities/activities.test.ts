@@ -52,6 +52,19 @@ function insertRun(id: number, userId: number, startDate: string) {
     .run();
 }
 
+// Contenu de toutes les tables applicatives, pour vérifier qu'une lecture n'écrit rien.
+async function databaseContent(): Promise<Record<string, unknown[]>> {
+  const { results: tables } = await env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name",
+  ).all<{ name: string }>();
+  const content: Record<string, unknown[]> = {};
+  for (const { name } of tables) {
+    const { results } = await env.DB.prepare(`SELECT * FROM "${name}"`).all();
+    content[name] = results;
+  }
+  return content;
+}
+
 async function sessionCookie(userId: number) {
   const cookie = await generateSignedCookie(
     "session",
@@ -148,6 +161,45 @@ describe("GET /api/activities", () => {
     expect(response.status).toBe(200);
     const body = await response.json<{ runs: { id: number }[] }>();
     expect(body.runs.map((run) => run.id)).toEqual([10]);
+  });
+
+  it("returns an empty elevation gain for a run Strava sent without one", async () => {
+    const payload = {
+      id: 10,
+      start_date: daysAgo(1),
+      distance: 5000,
+      moving_time: 1500,
+    };
+    await env.DB.prepare(
+      "INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (?, 1, ?, ?)",
+    )
+      .bind(10, JSON.stringify(payload), new Date().toISOString())
+      .run();
+
+    const response = await getActivities({ Cookie: await sessionCookie(1) });
+
+    const body = await response.json<{
+      runs: { elevationGainM: unknown; elevationPerKm: unknown }[];
+      total: { elevationGainM: unknown; elevationPerKm: unknown };
+    }>();
+    expect(body.runs[0]).toMatchObject({
+      elevationGainM: null,
+      elevationPerKm: null,
+    });
+    expect(body.total).toMatchObject({
+      elevationGainM: null,
+      elevationPerKm: null,
+    });
+  });
+
+  it("computes the elevation figures on the fly without writing to the database", async () => {
+    await insertRun(10, 1, daysAgo(1));
+    const before = await databaseContent();
+
+    const response = await getActivities({ Cookie: await sessionCookie(1) });
+
+    expect(response.status).toBe(200);
+    expect(await databaseContent()).toEqual(before);
   });
 
   describe("with a frozen clock", () => {
