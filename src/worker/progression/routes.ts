@@ -10,6 +10,7 @@ import { parsePayload, runSampleOf } from "../goals/fitness";
 import { FITNESS_WINDOW_DAYS, mergeRuns } from "../../core/fitness";
 import {
   buildProgression,
+  DAY_MS,
   isGrouping,
   isHistoryStale,
   isPeriod,
@@ -19,19 +20,18 @@ import {
 } from "../../core/progression";
 import { RUN_TYPES } from "../../core/run-types";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 // Préfiltre large (niveau glissant : 8 semaines avant la première période, +1 jour de marge).
 const IMPORTED_RUNS = `
   SELECT id, start_date AS startDate, sport_type AS sportType, distance_m AS distanceM,
     moving_time_s AS movingTimeS, elevation_gain_m AS elevationGainM,
     average_heartrate AS averageHeartrate
   FROM imported_activities WHERE user_id = ? AND start_date >= ?`;
-const LAST_IMPORTED =
-  "SELECT MAX(start_date) AS last FROM imported_activities WHERE user_id = ?";
+const LAST_IMPORTED = `
+  SELECT MAX(start_date) AS lastRun, MAX(imported_at) AS lastImport
+  FROM imported_activities WHERE user_id = ?`;
 const API_PAYLOADS = "SELECT payload FROM strava_activities WHERE user_id = ?";
 
-function positiveOrNull(value: unknown): number | null {
+function nonNegativeOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
     : null;
@@ -42,10 +42,10 @@ export function stravaProgressionRun(payload: string): ProgressionRun | null {
   const data = parsePayload(payload);
   const sample = data === null ? null : runSampleOf(data);
   if (data === null || sample === null) return null;
-  const heartrate = positiveOrNull(data.average_heartrate);
+  const heartrate = nonNegativeOrNull(data.average_heartrate);
   return {
     ...sample,
-    elevationGainM: positiveOrNull(data.total_elevation_gain),
+    elevationGainM: nonNegativeOrNull(data.total_elevation_gain),
     averageHeartrate: heartrate === 0 ? null : heartrate,
   };
 }
@@ -84,8 +84,10 @@ progressionRoutes.get("/", async (c) => {
     .map((row) => stravaProgressionRun(row.payload))
     .filter((run) => run !== null);
   const runs = mergeRuns(imported.results as ProgressionRun[], apiRuns);
-  const lastImportedRunDate =
-    (last.results[0] as { last: string | null } | undefined)?.last ?? null;
+  const lastRow = last.results[0] as
+    { lastRun: string | null; lastImport: string | null } | undefined;
+  const lastImportedRunDate = lastRow?.lastRun ?? null;
+  const lastImportAt = lastRow?.lastImport ?? null;
   const response: ProgressionResponse = {
     period,
     group,
@@ -97,7 +99,8 @@ progressionRoutes.get("/", async (c) => {
         .map((run) => run.startDate),
     ]),
     lastImportedRunDate,
-    historyStale: isHistoryStale(lastImportedRunDate, nowMs),
+    lastImportAt,
+    historyStale: isHistoryStale(lastImportAt, nowMs),
   };
   return c.json(response);
 });

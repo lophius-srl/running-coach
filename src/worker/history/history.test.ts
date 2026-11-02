@@ -382,6 +382,23 @@ describe("POST /api/history/import", () => {
   });
 });
 
+describe("imported_at", () => {
+  it("is refreshed by a re-import (date of the last import, #61)", async () => {
+    await postRows([run(1)]);
+    await env.DB.prepare(
+      "UPDATE imported_activities SET imported_at = '2020-01-01T00:00:00.000Z'",
+    ).run();
+    await postRows([run(1)]);
+    const row = await env.DB.prepare(
+      "SELECT imported_at FROM imported_activities WHERE id = 1",
+    ).first<{ imported_at: string }>();
+    expect(row?.imported_at ?? "").not.toBe("2020-01-01T00:00:00.000Z");
+    expect(Date.parse(row?.imported_at ?? "")).toBeGreaterThan(
+      Date.parse("2020-01-01T00:00:00.000Z"),
+    );
+  });
+});
+
 // ADR 0004 : la purge à 7 jours ne s'applique qu'à strava_activities.
 describe("daily purge", () => {
   const NOW_MS = Date.parse("2026-10-30T04:00:00.000Z");

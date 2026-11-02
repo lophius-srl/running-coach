@@ -60,12 +60,27 @@ describe("formatHoursMinutes", () => {
 });
 
 describe("staleMessage", () => {
-  it("invite à réimporter avec la date de la dernière course importée", () => {
-    expect(staleMessage("2026-09-12T07:00:00Z", true)).toContain(
-      "s'arrête au 12 septembre 2026",
+  const stale = {
+    lastImportedRunDate: "2026-09-12T07:00:00Z",
+    lastImportAt: "2026-09-14T20:00:00Z",
+    historyStale: true,
+  };
+
+  it("donne la dernière course importée et la date du dernier import", () => {
+    expect(staleMessage(stale)).toBe(
+      "Ton historique importé s'arrête au 12 septembre 2026. Si tu as couru depuis ton dernier import du 14 septembre 2026, réimporte activities.csv pour le compléter.",
     );
-    expect(staleMessage(null, true)).toContain("importe ton historique");
-    expect(staleMessage("2026-11-01T07:00:00Z", false)).toBeNull();
+  });
+
+  it("invite à importer sans historique, et se tait s'il est à jour", () => {
+    expect(
+      staleMessage({
+        lastImportedRunDate: null,
+        lastImportAt: null,
+        historyStale: true,
+      }),
+    ).toContain("importe ton historique");
+    expect(staleMessage({ ...stale, historyStale: false })).toBeNull();
   });
 });
 

@@ -39,10 +39,11 @@ export type ProgressionResponse = {
   buckets: ProgressionBucket[];
   lastRunDate: string | null; // ISO 8601 UTC, dernière course connue (toutes sources)
   lastImportedRunDate: string | null; // dernière course de l'historique importé
-  historyStale: boolean; // trou entre l'historique importé et les 7 jours de l'API
+  lastImportAt: string | null; // date du dernier import (imported_at le plus récent)
+  historyStale: boolean; // dernier import absent ou plus ancien que la fenêtre de l'API
 };
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+export const DAY_MS = 24 * 60 * 60 * 1000;
 // Au-delà, les données API (7 jours, ADR 0003) ne comblent plus le trou depuis le dernier import.
 export const HISTORY_STALE_DAYS = 7;
 const PERIOD_BUCKETS: Record<
@@ -141,13 +142,15 @@ export function progressionStartMs(
   return clock.midnightMs(first);
 }
 
-// Historique importé absent ou arrêté avant la fenêtre de l'API : il manque des courses.
+// Dernier import absent ou fait il y a plus de 7 jours : des courses peuvent manquer entre l'export
+// et la fenêtre de l'API. On juge la date de l'import, pas celle de la dernière course importée,
+// pour ne pas alerter après une simple pause.
 export function isHistoryStale(
-  lastImportedRunDate: string | null,
+  lastImportAt: string | null,
   nowMs: number,
 ): boolean {
-  if (lastImportedRunDate === null) return true;
-  return Date.parse(lastImportedRunDate) < nowMs - HISTORY_STALE_DAYS * DAY_MS;
+  if (lastImportAt === null) return true;
+  return Date.parse(lastImportAt) < nowMs - HISTORY_STALE_DAYS * DAY_MS;
 }
 
 type TimedRun = { run: ProgressionRun; ms: number };

@@ -1,6 +1,11 @@
 // Onglet Progression (issue #61) : séries, libellés et résumés (fonctions pures, testées sans React).
 
-import type { Grouping, Period, ProgressionBucket } from "../core/progression";
+import type {
+  Grouping,
+  Period,
+  ProgressionBucket,
+  ProgressionResponse,
+} from "../core/progression";
 import { summarize, type Trend } from "./charts/scale";
 import { formatDay, formatHeartrate, formatPace, formatVdot } from "./format";
 
@@ -170,14 +175,18 @@ export function describeSeries(
   return `${parts.join(" · ")}.`;
 }
 
-// Message quand l'historique importé ne couvre pas tout (ADR 0004 : import manuel), sinon null.
+// Message quand le dernier import date de plus de 7 jours (ADR 0004 : import manuel), sinon null.
 export function staleMessage(
-  lastImportedRunDate: string | null,
-  historyStale: boolean,
+  data: Pick<
+    ProgressionResponse,
+    "lastImportedRunDate" | "lastImportAt" | "historyStale"
+  >,
 ): string | null {
+  const { lastImportedRunDate, lastImportAt, historyStale } = data;
   if (!historyStale) return null;
-  if (lastImportedRunDate === null) {
+  if (lastImportAt === null || lastImportedRunDate === null) {
     return "Seules tes courses des 7 derniers jours sont connues : importe ton historique Strava pour voir ta progression sur la durée.";
   }
-  return `Ton historique importé s'arrête au ${formatDay(lastImportedRunDate, "Europe/Paris")} : les courses suivantes (hors 7 derniers jours) manquent. Réimporte ton fichier activities.csv pour le compléter.`;
+  const day = (iso: string) => formatDay(iso, "Europe/Paris");
+  return `Ton historique importé s'arrête au ${day(lastImportedRunDate)}. Si tu as couru depuis ton dernier import du ${day(lastImportAt)}, réimporte activities.csv pour le compléter.`;
 }

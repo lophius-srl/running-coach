@@ -106,6 +106,7 @@ describe("GET /api/progression", () => {
       buckets: [],
       lastRunDate: null,
       lastImportedRunDate: null,
+      lastImportAt: null,
       historyStale: true,
     });
   });
@@ -146,6 +147,9 @@ describe("GET /api/progression", () => {
 
   it("signale un historique en retard et compte la course API la plus récente", async () => {
     await importRun(1, 1, "2025-03-10T07:00:00.000Z");
+    await env.DB.prepare(
+      "UPDATE imported_activities SET imported_at = '2025-03-11T20:00:00.000Z'",
+    ).run();
     await syncRun(1, {
       id: 2,
       sport_type: "Run",
@@ -158,6 +162,7 @@ describe("GET /api/progression", () => {
     ).json<ProgressionResponse>();
     expect(body.historyStale).toBe(true);
     expect(body.lastImportedRunDate).toBe("2025-03-10T07:00:00.000Z");
+    expect(body.lastImportAt).toBe("2025-03-11T20:00:00.000Z");
     expect(body.lastRunDate).toBe("2026-11-03T07:00:00Z");
     expect(body.buckets[0].start).toBe("2025-03-01");
     expect(body.buckets.at(-1)?.start).toBe("2026-11-01");
@@ -341,22 +346,17 @@ describe("GET /api/progression : historique en retard", () => {
     expect(body.lastImportedRunDate).toBeNull();
   });
 
-  // BUG (QA #61) : historyStale compare la date de la dernière COURSE importée à now − 7 j, pas la
-  // date de l'IMPORT (colonne imported_at). Un import fait hier, après 10 jours sans courir, est
-  // signalé « en retard » et le message invite à réimporter alors qu'il ne manque rien.
-  // `it.fails` : ce test passera au vert (et devra devenir un `it`) quand le bug sera corrigé.
-  it.fails(
-    "ne signale rien après un import récent, même sans course depuis 10 jours",
-    async () => {
-      await env.DB.prepare(
-        `INSERT INTO imported_activities (user_id, id, start_date, sport_type, distance_m,
+  // Bug QA #61 corrigé : la fraîcheur se juge sur la date de l'import (imported_at), pas sur celle
+  // de la dernière course importée ; une pause de 10 jours ne déclenche plus d'alerte.
+  it("ne signale rien après un import récent, même sans course depuis 10 jours", async () => {
+    await env.DB.prepare(
+      `INSERT INTO imported_activities (user_id, id, start_date, sport_type, distance_m,
            moving_time_s, imported_at)
          VALUES (1, 22, '2026-10-25T07:00:00.000Z', 'Run', 10000, 3000, '2026-11-03T20:00:00.000Z')`,
-      ).run();
-      const body = await (
-        await getProgression("?period=3m&group=week")
-      ).json<ProgressionResponse>();
-      expect(body.historyStale).toBe(false);
-    },
-  );
+    ).run();
+    const body = await (
+      await getProgression("?period=3m&group=week")
+    ).json<ProgressionResponse>();
+    expect(body.historyStale).toBe(false);
+  });
 });

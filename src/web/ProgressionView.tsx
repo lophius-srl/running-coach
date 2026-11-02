@@ -234,7 +234,7 @@ export function ProgressionView() {
     );
   }
 
-  const stale = staleMessage(data.lastImportedRunDate, data.historyStale);
+  const stale = staleMessage(data);
   const [volume, ...others] = SERIES;
   return (
     <>
