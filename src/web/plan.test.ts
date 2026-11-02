@@ -56,6 +56,7 @@ describe("adjusted sessions", () => {
     durationMin: 35,
     description: "",
     targetPace: null,
+    targetHeartRate: null,
     planned: null,
   };
 

@@ -22,7 +22,8 @@ import {
   zonedMidnightMs,
   type Goal,
 } from "../goals/rules";
-import { withTargetPaces, type PlanError } from "./view";
+import { loadHeartRate } from "../heart-rate/routes";
+import { withTargets, type PlanError } from "./view";
 
 type PlanRow = {
   week_start: string;
@@ -77,18 +78,20 @@ function toPlan(rows: PlanRow[]): WeekPlan | null {
 }
 
 async function loadGoalAndPaces(db: D1Database, userId: number, nowMs: number) {
-  const [row, runs] = await Promise.all([
+  const [row, runs, heartRate] = await Promise.all([
     db.prepare(SELECT_GOAL).bind(userId).first<GoalRow & { id: number }>(),
     loadRuns(db, userId, nowMs),
+    loadHeartRate(db, userId),
   ]);
   const goal: Goal | null = row && toGoal(row);
   const fitness = estimateFitness(runs, nowMs);
   const paces: TrainingPaces | null =
     goal && fitness && trainingPaces({ ...goal, vdot: fitness.vdot });
-  // Plan affiché : plan de base ajusté aux courses récentes, avec les allures du moment.
+  // Plan affiché : plan de base ajusté aux courses récentes, avec les allures et zones
+  // cardiaques du moment.
   // Décision ancrée sur le début du plan (minuit à Paris de weekStart) : stable toute la semaine.
   const view = (plan: WeekPlan) =>
-    withTargetPaces(
+    withTargets(
       adjustPlan(
         plan,
         runs,
@@ -96,6 +99,7 @@ async function loadGoalAndPaces(db: D1Database, userId: number, nowMs: number) {
         localIsoDate(nowMs, APP_TIME_ZONE),
       ),
       paces,
+      { settings: heartRate, raceDistanceM: goal?.distanceM ?? null },
     );
   return { goalId: row?.id ?? null, goal, paces, view };
 }
