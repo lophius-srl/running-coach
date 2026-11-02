@@ -98,3 +98,100 @@ describe("graphiques SVG", () => {
     expect(html).toMatch(/class="chart-dot"/); // A, point isolé
   });
 });
+
+// --- QA #61 : rendu des graphiques aux cas limites ---
+
+describe("graphiques SVG : cas limites", () => {
+  const props = (values: (number | null)[]) => ({
+    title: "Série",
+    points: values.map((value, i) => ({
+      label: `p${i}`,
+      detail: `période ${i}`,
+      value,
+    })),
+    format: String,
+    summary: "Résumé.",
+  });
+  const render = (kind: typeof BarChart, values: (number | null)[]) =>
+    renderToStaticMarkup(createElement(kind, props(values)));
+
+  it.each([
+    ["barres toutes nulles", BarChart, [null, null, null]],
+    ["ligne toute nulle", LineChart, [null, null, null]],
+    ["barres à zéro", BarChart, [0, 0, 0]],
+    ["ligne à une seule valeur", LineChart, [300]],
+    ["ligne constante", LineChart, [300, 300, 300]],
+    ["aucune période", LineChart, []],
+  ] as const)("%s : aucune coordonnée NaN ni infinie", (_, kind, values) => {
+    const html = render(kind, [...values]);
+    expect(html).not.toMatch(/NaN|Infinity/);
+  });
+
+  it("ne trace rien pour une ligne sans aucune valeur", () => {
+    const html = render(LineChart, [null, null]);
+    expect(html).not.toContain("<polyline");
+    expect(html).not.toContain("chart-dot");
+    expect(html).toContain("période 1 : pas de donnée");
+  });
+
+  it("dessine un point pour une ligne à une seule valeur", () => {
+    const html = render(LineChart, [300]);
+    expect(html).not.toContain("<polyline");
+    expect(html).toContain('class="chart-dot"');
+  });
+
+  it("place l'allure la plus rapide en haut sur l'axe inversé", () => {
+    const html = renderToStaticMarkup(
+      createElement(LineChart, { ...props([240, 360]), inverted: true }),
+    );
+    const [first, second] = html
+      .match(/<polyline[^>]*points="([^"]+)"/)![1]
+      .split(" ")
+      .map((p) => Number(p.split(",")[1]));
+    expect(first).toBeLessThan(second); // 4:00/km plus haut (y plus petit) que 6:00/km
+  });
+
+  it("place la plus grande valeur en haut sur un axe normal", () => {
+    const html = render(LineChart, [240, 360]);
+    const [first, second] = html
+      .match(/<polyline[^>]*points="([^"]+)"/)![1]
+      .split(" ")
+      .map((p) => Number(p.split(",")[1]));
+    expect(first).toBeGreaterThan(second);
+  });
+
+  // BUG (QA #61) : Chart.tsx borne l'axe des barres à Math.max(1, …) en unité brute (1 m) ; sans
+  // course sur la période, l'axe du volume va de 0 à 1 m et affiche « 0 », « 0 », « 0 » (km).
+  // `it.fails` : à passer en `it` une fois corrigé.
+  it.fails(
+    "donne des graduations distinctes au volume d'une période sans course",
+    () => {
+      const volume = series("distance");
+      const html = renderToStaticMarkup(
+        createElement(BarChart, {
+          ...props([0, 0, 0]),
+          format: volume.format,
+          axisFormat: volume.axisFormat,
+        }),
+      );
+      const labels = [
+        ...html.matchAll(/<text[^>]*text-anchor="end"[^>]*>([^<]*)</g),
+      ].map((m) => m[1]);
+      expect(new Set(labels).size).toBe(labels.length);
+    },
+  );
+});
+
+describe("describeSeries : cas limites", () => {
+  it("résume une série de zéros comme stable", () => {
+    expect(describeSeries(series("distance"), [0, 0, 0])).toBe(
+      "Dernière période complète : 0 km · moyenne : 0 km · tendance : stable.",
+    );
+  });
+
+  it("n'annonce pas de tendance avec une seule valeur", () => {
+    expect(describeSeries(series("heartrate"), [null, 150])).not.toContain(
+      "tendance",
+    );
+  });
+});

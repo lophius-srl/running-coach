@@ -210,3 +210,153 @@ describe("stravaProgressionRun", () => {
     expect(stravaProgressionRun("{oops")).toBeNull();
   });
 });
+
+// --- QA #61 : sources, isolation, absence d'écriture ---
+
+async function databaseSnapshot(): Promise<string> {
+  const { results: tables } = await env.DB.prepare(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY name",
+  ).all<{ name: string }>();
+  const dump: Record<string, unknown[]> = {};
+  for (const { name } of tables) {
+    dump[name] = (
+      await env.DB.prepare(`SELECT * FROM "${name}"`).all()
+    ).results;
+  }
+  return JSON.stringify(dump);
+}
+
+describe("GET /api/progression : sources et confidentialité", () => {
+  const apiRun = {
+    sport_type: "Run",
+    start_date: "2026-11-03T07:00:00Z",
+    distance: 8000,
+    moving_time: 2400,
+  };
+
+  it("compte une seule fois une course présente dans l'historique et dans l'API", async () => {
+    await importRun(1, 5, "2026-11-03T07:00:00.000Z", 8000);
+    await syncRun(1, { id: 5, ...apiRun });
+    const body = await (
+      await getProgression("?period=3m&group=week")
+    ).json<ProgressionResponse>();
+    expect(body.buckets.at(-1)).toMatchObject({ count: 1, distanceM: 8000 });
+  });
+
+  it("exclut une activité vélo de l'API, du volume comme de la dernière course", async () => {
+    await syncRun(1, {
+      ...apiRun,
+      id: 6,
+      sport_type: "Ride",
+      distance: 40_000,
+    });
+    const body = await (
+      await getProgression("?period=3m&group=week")
+    ).json<ProgressionResponse>();
+    expect(body.buckets.at(-1)?.count).toBe(0);
+    expect(body.lastRunDate).toBeNull();
+  });
+
+  it("lit le type d'une activité API sans sport_type", async () => {
+    await syncRun(1, {
+      id: 7,
+      type: "Run",
+      start_date: apiRun.start_date,
+      distance: apiRun.distance,
+      moving_time: apiRun.moving_time,
+    });
+    const body = await (
+      await getProgression("?period=3m&group=week")
+    ).json<ProgressionResponse>();
+    expect(body.buckets.at(-1)?.count).toBe(1);
+  });
+
+  it("ignore un payload API illisible sans échouer", async () => {
+    await env.DB.prepare(
+      "INSERT INTO strava_activities (id, user_id, payload, fetched_at) VALUES (8, 1, '{oops', '2026-11-04T08:00:00.000Z')",
+    ).run();
+    const response = await getProgression("?period=3m&group=week");
+    expect(response.status).toBe(200);
+    expect((await response.json<ProgressionResponse>()).lastRunDate).toBeNull();
+  });
+
+  it("ne voit ni l'historique ni les activités API d'un autre utilisateur", async () => {
+    await importRun(2, 10, "2026-11-02T07:00:00.000Z");
+    await syncRun(2, { ...apiRun, id: 11 });
+    const body = await (
+      await getProgression("?period=all&group=week")
+    ).json<ProgressionResponse>();
+    expect(body).toMatchObject({
+      buckets: [],
+      lastRunDate: null,
+      lastImportedRunDate: null,
+    });
+  });
+
+  it("n'écrit rien en base", async () => {
+    await importRun(1, 12, "2026-10-01T07:00:00.000Z");
+    await syncRun(1, { ...apiRun, id: 13 });
+    const before = await databaseSnapshot();
+    for (const query of [
+      "?period=3m&group=week",
+      "?period=all&group=month",
+      "?period=2y&group=week",
+    ]) {
+      await getProgression(query);
+    }
+    expect(await databaseSnapshot()).toBe(before);
+  });
+
+  it("refuse une autre méthode que GET", async () => {
+    const response = await app.request(
+      "https://coach.example/api/progression?period=3m&group=week",
+      { method: "POST", headers: { Cookie: await sessionCookie(1) } },
+      testEnv,
+    );
+    expect(response.status).not.toBe(200);
+  });
+});
+
+describe("GET /api/progression : historique en retard", () => {
+  it("ne signale rien quand la dernière course importée date de moins de 7 jours", async () => {
+    await importRun(1, 20, "2026-10-30T07:00:00.000Z");
+    const body = await (
+      await getProgression("?period=3m&group=week")
+    ).json<ProgressionResponse>();
+    expect(body.historyStale).toBe(false);
+  });
+
+  it("signale un historique absent même avec des courses API", async () => {
+    await syncRun(1, {
+      id: 21,
+      sport_type: "Run",
+      start_date: "2026-11-03T07:00:00Z",
+      distance: 8000,
+      moving_time: 2400,
+    });
+    const body = await (
+      await getProgression("?period=3m&group=week")
+    ).json<ProgressionResponse>();
+    expect(body.historyStale).toBe(true);
+    expect(body.lastImportedRunDate).toBeNull();
+  });
+
+  // BUG (QA #61) : historyStale compare la date de la dernière COURSE importée à now − 7 j, pas la
+  // date de l'IMPORT (colonne imported_at). Un import fait hier, après 10 jours sans courir, est
+  // signalé « en retard » et le message invite à réimporter alors qu'il ne manque rien.
+  // `it.fails` : ce test passera au vert (et devra devenir un `it`) quand le bug sera corrigé.
+  it.fails(
+    "ne signale rien après un import récent, même sans course depuis 10 jours",
+    async () => {
+      await env.DB.prepare(
+        `INSERT INTO imported_activities (user_id, id, start_date, sport_type, distance_m,
+           moving_time_s, imported_at)
+         VALUES (1, 22, '2026-10-25T07:00:00.000Z', 'Run', 10000, 3000, '2026-11-03T20:00:00.000Z')`,
+      ).run();
+      const body = await (
+        await getProgression("?period=3m&group=week")
+      ).json<ProgressionResponse>();
+      expect(body.historyStale).toBe(false);
+    },
+  );
+});
