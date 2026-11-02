@@ -32,9 +32,11 @@ export function toHeartRateForm(settings: HeartRateSettings): HeartRateForm {
   };
 }
 
-// Champ vide ou illisible → NaN, que validateHeartRate rejette avec un message clair.
+// Chiffres seulement : champ vide ou autre écriture (« 0x80 », « 1e2 », « 128. ») → NaN, que
+// validateHeartRate rejette avec un message clair.
 function bpm(text: string): number {
-  return text.trim() === "" ? Number.NaN : Number(text.trim());
+  const digits = text.trim();
+  return /^\d+$/.test(digits) ? Number(digits) : Number.NaN;
 }
 
 export function toHeartRateInput(form: HeartRateForm) {

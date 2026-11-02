@@ -33,16 +33,12 @@ describe("heart rate form", () => {
     });
   });
 
-  it("trims spaces and keeps decimals for validation to reject", () => {
-    const form = {
-      ...toHeartRateForm(settings),
-      restingHr: " 52 ",
-      maxHr: "190.5",
-    };
-    expect(toHeartRateInput(form)).toMatchObject({
-      restingHr: 52,
-      maxHr: 190.5,
-    });
+  it("trims spaces and accepts digits only", () => {
+    const form = toHeartRateForm(settings);
+    expect(toHeartRateInput({ ...form, restingHr: " 52 " }).restingHr).toBe(52);
+    for (const text of ["190.5", "128.", "0x80", "1e2", "-60", "+60", "6 0"]) {
+      expect(toHeartRateInput({ ...form, maxHr: text }).maxHr).toBeNaN();
+    }
   });
 });
 
