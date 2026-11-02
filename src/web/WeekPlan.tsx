@@ -3,6 +3,7 @@ import { HARD_KINDS } from "../core/plan";
 import type { PlanResponse, PlanView } from "../worker/plans/view";
 import { RouteLink } from "./AppNav";
 import { formatPaceRange, localIsoDate } from "./format";
+import { formatHeartRateTarget } from "./heart-rate";
 import {
   formatPlanDay,
   formatPlanPeriod,
@@ -92,12 +93,16 @@ function PlanSessions({ plan }: { plan: PlanView }) {
       </p>
     );
   }
-  // Une séance par ligne (jour, type, durée, allure cible) ; le descriptif se déplie au clic.
+  // Une séance par ligne (jour, type, durée, allure et zone cardiaque cibles) ; le descriptif
+  // se déplie au clic.
   return (
-    <ol className="card plan-list">
+    <ol
+      className={`card plan-list${plan.sessions.some((s) => s.targetHeartRate) ? " plan-list-hr" : ""}`}
+    >
       {plan.sessions.map((session) => {
         const hard = HARD_KINDS.has(session.kind);
         const pace = session.targetPace;
+        const heartRate = session.targetHeartRate;
         const replaced = replacedKindLabel(session);
         return (
           <li
@@ -124,6 +129,14 @@ function PlanSessions({ plan }: { plan: PlanView }) {
                     ? formatPaceRange(pace.fastSPerKm, pace.slowSPerKm)
                     : "–"}
                 </span>
+                {heartRate && (
+                  <span className="plan-hr">
+                    <span className="visually-hidden">
+                      Zone cardiaque cible :{" "}
+                    </span>
+                    {formatHeartRateTarget(heartRate)}
+                  </span>
+                )}
               </summary>
               <p className="plan-description">{session.description}</p>
             </details>

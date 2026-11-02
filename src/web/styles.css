@@ -376,6 +376,14 @@ a {
   }
 }
 
+/* Colonne de plusieurs sections empilées (allures et zones cardiaques). */
+.view-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
 /* Textes */
 
 /* Lien dans le texte, et lien d'action seul sur sa ligne (cible ≥ 44 px). */
@@ -815,6 +823,73 @@ a {
   font-weight: 400;
 }
 
+/* Zones cardiaques (#57) : calculateur FC repos / FC max, puis tableau compact des 5 zones. */
+
+.hr-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
+.hr-calculator {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.hr-calculator .field {
+  flex: 1 1 6rem;
+}
+
+.hr-input {
+  width: 100%;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.hr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.hr-table th,
+.hr-table td {
+  padding: var(--space-1) 0;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.hr-table th + th,
+.hr-table td {
+  padding-left: var(--space-2);
+}
+
+.hr-table thead th {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.hr-table tbody tr + tr {
+  border-top: var(--border-width) solid var(--color-border-subtle);
+}
+
+.hr-table tbody th {
+  font-weight: 400;
+}
+
+.hr-table tbody th .muted {
+  display: block;
+  line-height: 1.2;
+}
+
+.hr-table td {
+  width: 32%;
+}
+
 /* Import de l'historique */
 
 .history-import {
@@ -942,10 +1017,32 @@ details[open] > .plan-summary::after {
   font-size: var(--font-size-sm);
 }
 
+/* Zone cardiaque cible (#57) : sous l'allure, dans la même colonne. */
+.plan-list-hr .plan-summary {
+  grid-template-areas:
+    "kind duration"
+    "day pace"
+    ". hr";
+}
+
+.plan-hr {
+  grid-area: hr;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-align: right;
+  white-space: nowrap;
+}
+
 @media (min-width: 768px) {
   .plan-summary {
     grid-template-columns: 8.5rem minmax(0, 1fr) auto 8.5rem;
     grid-template-areas: "day kind duration pace";
+  }
+
+  .plan-list-hr .plan-summary {
+    grid-template-areas:
+      "day kind duration pace"
+      "day kind duration hr";
   }
 }
 

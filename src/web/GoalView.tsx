@@ -1,5 +1,6 @@
 import type { GoalResponse } from "../worker/goals/rules";
 import { GoalForm } from "./GoalForm";
+import { HeartRateZones } from "./HeartRateZones";
 import { Paces } from "./Paces";
 import { Loading } from "./ui";
 import type { GoalState } from "./useGoal";
@@ -10,7 +11,7 @@ type Props = {
   onSaved: (response: GoalResponse) => void;
 };
 
-// Formulaire d'objectif | zones d'allures (côte à côte sur grand écran).
+// Formulaire d'objectif | zones d'allure et zones cardiaques (côte à côte sur grand écran).
 export function GoalView({ goal, onRetry, onSaved }: Props) {
   if (goal.status === "loading") {
     return <Loading label="Chargement de ton objectif…" />;
@@ -34,7 +35,10 @@ export function GoalView({ goal, onRetry, onSaved }: Props) {
   return (
     <div className="view-grid">
       <GoalForm goal={saved} onSaved={onSaved} />
-      <Paces paces={paces} basis={basis} />
+      <div className="view-stack">
+        <Paces paces={paces} basis={basis} />
+        <HeartRateZones />
+      </div>
     </div>
   );
 }
