@@ -108,16 +108,16 @@ function PlanSessions({ plan }: { plan: PlanView }) {
               <summary className="plan-summary">
                 <time className="plan-day" dateTime={session.date}>
                   {formatPlanDay(session.date)}
-                </time>
+                </time>{" "}
                 <span className="plan-kind">
-                  <strong>{SESSION_LABELS[session.kind]}</strong>
-                  {hard && <span className="plan-tag">Séance dure</span>}
+                  <strong>{SESSION_LABELS[session.kind]}</strong>{" "}
+                  {hard && <span className="plan-tag">Séance dure</span>}{" "}
                   {replaced && <span className="muted">{replaced}</span>}
-                </span>
+                </span>{" "}
                 <span className="plan-duration">
                   <span className="visually-hidden">Durée : </span>
                   {formatSessionDuration(session)}
-                </span>
+                </span>{" "}
                 <span className="plan-pace">
                   <span className="visually-hidden">Allure cible : </span>
                   {pace

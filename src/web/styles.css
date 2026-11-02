@@ -194,6 +194,30 @@ a {
   list-style: none;
 }
 
+/* Onglets de même hauteur, quelle que soit la longueur du libellé. */
+.app-nav-list > li {
+  display: flex;
+}
+
+.app-nav-link {
+  flex: 1;
+}
+
+/* Libellé court sur la barre du bas (mobile), complet à partir de la tablette. */
+.app-nav-label-full {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .app-nav-label-full {
+    display: inline;
+  }
+
+  .app-nav-label-short {
+    display: none;
+  }
+}
+
 .app-nav-link {
   display: flex;
   flex-direction: column;
@@ -778,12 +802,6 @@ a {
 
 /* Plan de la semaine (vue « Mon plan ») */
 
-.view-stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
-
 .week-plan {
   display: flex;
   flex-direction: column;
@@ -885,7 +903,8 @@ details[open] > .plan-summary::after {
 }
 
 /* Séance dure : liseré orange, doublé du libellé « Séance dure » (pas que la couleur). */
-.plan-session-hard {
+.plan-session-hard .plan-summary,
+.plan-session-hard .plan-description {
   box-shadow: inset var(--accent-width) 0 0 var(--color-strava);
 }
 
