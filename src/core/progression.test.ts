@@ -57,6 +57,44 @@ describe("calendrier", () => {
   });
 });
 
+describe("zoneClock : format Intl inattendu", () => {
+  function withFormat(text: string) {
+    const fake = { format: () => text } as unknown as Intl.DateTimeFormat;
+    return vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function () {
+      return fake;
+    } as unknown as typeof Intl.DateTimeFormat);
+  }
+
+  it.each(["11/02/2026, 00:30", "2026-11-02 00:30", "2026-11-02, 24h"])(
+    "lève une erreur explicite pour « %s »",
+    (text) => {
+      const spy = withFormat(text);
+      try {
+        const clock = zoneClock(PARIS);
+        expect(() => clock.localDate(0)).toThrow(
+          /Format de date Intl inattendu/,
+        );
+        expect(() => clock.midnightMs("2026-11-02")).toThrow(
+          /Format de date Intl inattendu/,
+        );
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
+
+  it("lève une erreur explicite pour une date impossible", () => {
+    const spy = withFormat("2026-13-45, 00:30");
+    try {
+      expect(() => zoneClock(PARIS).midnightMs("2026-11-02")).toThrow(
+        /Date Intl illisible/,
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
 describe("paramètres", () => {
   it("valide période et regroupement", () => {
     expect(isPeriod("3m")).toBe(true);

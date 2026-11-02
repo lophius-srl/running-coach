@@ -107,15 +107,26 @@ export function zoneClock(timeZone: string) {
     minute: "2-digit",
     hourCycle: "h23",
   });
+  // Lecture de « 2026-11-02, 00:30 » ; un autre format (moteur Intl différent) lève une erreur
+  // explicite plutôt que de ranger silencieusement les courses dans la mauvaise période.
+  function wallClock(ms: number): { date: string; time: string } {
+    const text = format.format(ms);
+    const match = /^(\d{4}-\d{2}-\d{2}), (\d{2}:\d{2})$/.exec(text);
+    if (!match) throw new Error(`Format de date Intl inattendu : « ${text} »`);
+    return { date: match[1], time: match[2] };
+  }
   // Décalage du fuseau à un instant (ex. +3 600 000 à Paris en hiver), à la minute près.
   function offsetMs(atMs: number): number {
-    const text = format.format(atMs);
-    const wallMs = Date.parse(`${text.slice(0, 10)}T${text.slice(12, 17)}:00Z`);
+    const { date, time } = wallClock(atMs);
+    const wallMs = Date.parse(`${date}T${time}:00Z`);
+    if (Number.isNaN(wallMs)) {
+      throw new Error(`Date Intl illisible : « ${date}, ${time} »`);
+    }
     return wallMs - (atMs - (((atMs % 60_000) + 60_000) % 60_000));
   }
   return {
     // Date calendaire locale (AAAA-MM-JJ) d'un instant.
-    localDate: (ms: number): string => format.format(ms).slice(0, 10),
+    localDate: (ms: number): string => wallClock(ms).date,
     // Instant du minuit local de `isoDate` (les changements d'heure de Paris n'ont pas lieu à minuit).
     midnightMs: (isoDate: string): number => {
       const utcMidnight = toUtcMs(isoDate);
