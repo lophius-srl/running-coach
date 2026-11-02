@@ -175,26 +175,37 @@ describe("graphiques SVG : cas limites", () => {
     expect(first).toBeGreaterThan(second);
   });
 
-  // BUG (QA #61) : Chart.tsx borne l'axe des barres à Math.max(1, …) en unité brute (1 m) ; sans
-  // course sur la période, l'axe du volume va de 0 à 1 m et affiche « 0 », « 0 », « 0 » (km).
-  // `it.fails` : à passer en `it` une fois corrigé.
-  it.fails(
-    "donne des graduations distinctes au volume d'une période sans course",
-    () => {
-      const volume = series("distance");
-      const html = renderToStaticMarkup(
-        createElement(BarChart, {
-          ...props([0, 0, 0]),
-          format: volume.format,
-          axisFormat: volume.axisFormat,
-        }),
-      );
-      const labels = [
-        ...html.matchAll(/<text[^>]*text-anchor="end"[^>]*>([^<]*)</g),
-      ].map((m) => m[1]);
-      expect(new Set(labels).size).toBe(labels.length);
-    },
-  );
+  // Bug QA #61 corrigé : étendue minimale par série (1 000 m pour le volume) quand tout est à 0.
+  it("donne des graduations distinctes au volume d'une période sans course", () => {
+    const volume = series("distance");
+    const html = renderToStaticMarkup(
+      createElement(BarChart, {
+        ...props([0, 0, 0]),
+        format: volume.format,
+        axisFormat: volume.axisFormat,
+        minSpan: volume.minSpan,
+      }),
+    );
+    const labels = [
+      ...html.matchAll(/<text[^>]*text-anchor="end"[^>]*>([^<]*)</g),
+    ].map((m) => m[1]);
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(labels.at(-1)).toBe("1");
+  });
+
+  it("n'affiche ni graduation ni tracé pour une ligne sans aucune valeur", () => {
+    const html = renderToStaticMarkup(
+      createElement(LineChart, props([null, null, null])),
+    );
+    expect(html).toContain("Aucune donnée sur la période");
+    expect(html).not.toMatch(/text-anchor="end"/);
+    expect(html).not.toContain("<polyline");
+  });
+
+  it("donne au D+ une étendue minimale de 100 m", () => {
+    expect(series("elevation").minSpan).toBe(100);
+    expect(series("longest").minSpan).toBe(1000);
+  });
 });
 
 describe("describeSeries : cas limites", () => {

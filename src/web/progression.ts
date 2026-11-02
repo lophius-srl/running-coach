@@ -86,6 +86,7 @@ export type Series = {
   value: (bucket: ProgressionBucket) => number | null;
   format: (value: number) => string;
   axisFormat: (value: number) => string; // graduations, sans unité
+  minSpan?: number; // étendue minimale de l'axe des barres, dans l'unité de la valeur
   inverted?: boolean; // allure : en haut = plus rapide
 };
 
@@ -97,6 +98,7 @@ export const SERIES: readonly Series[] = [
     value: (b) => b.distanceM,
     format: km,
     axisFormat: kmNumber,
+    minSpan: 1000,
   },
   {
     id: "elevation",
@@ -105,6 +107,7 @@ export const SERIES: readonly Series[] = [
     value: (b) => b.elevationGainM,
     format: (m) => `${integer(m)} m`,
     axisFormat: integer,
+    minSpan: 100,
   },
   {
     id: "pace",
@@ -130,6 +133,7 @@ export const SERIES: readonly Series[] = [
     value: (b) => b.longestM,
     format: km,
     axisFormat: kmNumber,
+    minSpan: 1000,
   },
   {
     id: "vdot",

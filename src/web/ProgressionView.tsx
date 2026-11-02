@@ -105,6 +105,7 @@ function SeriesChart({
     points,
     format: series.format,
     axisFormat: series.axisFormat,
+    minSpan: series.minSpan,
     summary: describeSeries(
       series,
       completePeriods(points.map((p) => p.value)),

@@ -23,6 +23,7 @@ type Props = {
   points: readonly ChartPoint[];
   format: (value: number) => string;
   axisFormat?: (value: number) => string; // graduations de l'axe des y, sans unité
+  minSpan?: number; // étendue minimale de l'axe des barres (ex. 1 000 m) quand tout est à 0
   summary: string;
   inverted?: boolean; // axe inversé : petite valeur en haut (allure)
 };
@@ -69,11 +70,14 @@ function Chart(props: Props & { kind: "bar" | "line" }) {
   const values = points
     .map((p) => p.value)
     .filter((v): v is number => v !== null);
-  const ticks =
-    kind === "bar"
-      ? niceTicks(0, Math.max(1, ...values))
+  // Ligne sans aucune valeur : ni graduations ni tracé, seulement un message.
+  const empty = kind === "line" && values.length === 0;
+  const ticks = empty
+    ? []
+    : kind === "bar"
+      ? niceTicks(0, Math.max(props.minSpan ?? 1, ...values))
       : niceTicks(Math.min(...values), Math.max(...values));
-  const [low, high] = [ticks[0], ticks[ticks.length - 1]];
+  const [low, high] = empty ? [0, 1] : [ticks[0], ticks[ticks.length - 1]];
   const plotW = width - MARGIN.left - MARGIN.right;
   const plotH = HEIGHT - MARGIN.top - MARGIN.bottom;
   const band = plotW / Math.max(1, points.length);
@@ -175,6 +179,16 @@ function Chart(props: Props & { kind: "bar" | "line" }) {
                 {points[i].label}
               </text>
             ),
+          )}
+          {empty && (
+            <text
+              className="chart-axis"
+              x={MARGIN.left + plotW / 2}
+              y={MARGIN.top + plotH / 2}
+              textAnchor="middle"
+            >
+              Aucune donnée sur la période
+            </text>
           )}
           <line
             className="chart-cursor"
