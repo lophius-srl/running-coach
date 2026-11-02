@@ -3,6 +3,7 @@ import { summarizeRecentRuns } from "./activities/recent";
 import { authRoutes } from "./auth/routes";
 import { readSession } from "./auth/session";
 import { goalRoutes } from "./goals/routes";
+import { heartRateRoutes } from "./heart-rate/routes";
 import { historyRoutes } from "./history/routes";
 import { planRoutes } from "./plans/routes";
 import type { AppEnv, Bindings } from "./env";
@@ -35,6 +36,7 @@ app.use("/api/*", async (c, next) => {
 
 app.route("/api/auth", authRoutes);
 app.route("/api/goal", goalRoutes);
+app.route("/api/heart-rate-zones", heartRateRoutes);
 app.route("/api/history", historyRoutes);
 app.route("/api/plan", planRoutes);
 app.route("/api/strava/webhook", webhookRoutes);
