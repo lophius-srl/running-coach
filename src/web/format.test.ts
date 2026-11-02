@@ -3,6 +3,8 @@ import {
   formatDay,
   formatDistance,
   formatDuration,
+  formatElevationGain,
+  formatElevationPerKm,
   formatHeartrate,
   formatPace,
   formatPaceBasis,
@@ -144,6 +146,33 @@ describe("formatStartDate", () => {
     expect(utc).toContain("23:30");
     expect(paris).toContain("30");
     expect(paris).toContain("00:30");
+  });
+});
+
+describe("formatElevationGain", () => {
+  it("rounds the elevation gain to the metre", () => {
+    expect(formatElevationGain(244.6)).toBe("245 m");
+    expect(formatElevationGain(0)).toBe("0 m");
+  });
+
+  it("can name the figure when no visible label does", () => {
+    expect(formatElevationGain(245, { withLabel: true })).toBe("245 m D+");
+  });
+
+  it("shows a dash when Strava has no elevation gain", () => {
+    expect(formatElevationGain(null)).toBe("–");
+    expect(formatElevationGain(null, { withLabel: true })).toBe("– D+");
+  });
+});
+
+describe("formatElevationPerKm", () => {
+  it("shows the metres of elevation gain per km", () => {
+    expect(formatElevationPerKm(18)).toBe("18 m/km");
+    expect(formatElevationPerKm(0)).toBe("0 m/km");
+  });
+
+  it("shows a dash when the ratio is unknown", () => {
+    expect(formatElevationPerKm(null)).toBe("–");
   });
 });
 
