@@ -4,6 +4,7 @@ import {
   formatDuration,
   formatHeartrate,
   formatPace,
+  formatRunDay,
   formatRunName,
   formatStartDate,
 } from "./format";
@@ -17,16 +18,16 @@ function WeekTotal({ total }: { total: RecentRunsData["total"] }) {
   return (
     <>
       <h3 className="visually-hidden">Total de la semaine</h3>
-      <dl className="key-figures">
-        <div className="card key-figure">
+      <dl className="card key-figures">
+        <div className="key-figure">
           <dt>Distance</dt>
           <dd>{formatDistance(total.distanceM)}</dd>
         </div>
-        <div className="card key-figure">
+        <div className="key-figure">
           <dt>Temps</dt>
           <dd>{formatDuration(total.movingTimeS)}</dd>
         </div>
-        <div className="card key-figure">
+        <div className="key-figure">
           <dt>Courses</dt>
           <dd>{total.count}</dd>
         </div>
@@ -35,32 +36,23 @@ function WeekTotal({ total }: { total: RecentRunsData["total"] }) {
   );
 }
 
-function RunCard({ run }: { run: RecentRunsData["runs"][number] }) {
+// Une sortie sur deux lignes, après la colonne du jour : nom et lien Strava, puis chiffres.
+// Les libellés des chiffres sont lus par les lecteurs d'écran ; à l'écran, les unités suffisent.
+function RunRow({ run }: { run: RecentRunsData["runs"][number] }) {
   const startDate = formatStartDate(run.startDate);
+  const { weekday, day } = formatRunDay(run.startDate);
+  const figures = [
+    ["Distance", formatDistance(run.distanceM)],
+    ["Durée", formatDuration(run.movingTimeS)],
+    ["Allure moyenne", formatPace(run.paceSPerKm)],
+    ["FC moyenne", formatHeartrate(run.averageHeartrate)],
+  ];
   return (
-    <li className="card run-card">
+    <li className="run-row">
+      <time className="run-day" dateTime={run.startDate} title={startDate}>
+        <span>{weekday}</span> <span>{day}</span>
+      </time>
       <h3 className="run-name">{formatRunName(run.name)}</h3>
-      <p className="muted">
-        <time dateTime={run.startDate}>{startDate}</time>
-      </p>
-      <dl className="run-stats">
-        <div>
-          <dt>Distance</dt>
-          <dd>{formatDistance(run.distanceM)}</dd>
-        </div>
-        <div>
-          <dt>Durée</dt>
-          <dd>{formatDuration(run.movingTimeS)}</dd>
-        </div>
-        <div>
-          <dt>Allure moyenne</dt>
-          <dd>{formatPace(run.paceSPerKm)}</dd>
-        </div>
-        <div>
-          <dt>FC moyenne</dt>
-          <dd>{formatHeartrate(run.averageHeartrate)}</dd>
-        </div>
-      </dl>
       <a
         className="strava-link"
         href={`https://www.strava.com/activities/${run.id}`}
@@ -72,6 +64,14 @@ function RunCard({ run }: { run: RecentRunsData["runs"][number] }) {
           {` : ${run.name || startDate} (nouvel onglet)`}
         </span>
       </a>
+      <dl className="run-figures">
+        {figures.map(([label, value]) => (
+          <div key={label}>
+            <dt className="visually-hidden">{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
     </li>
   );
 }
@@ -93,9 +93,9 @@ export function RecentRuns({ data }: { data: RecentRunsData }) {
       ) : (
         <>
           <WeekTotal total={data.total} />
-          <ul className="run-list">
+          <ul className="card run-list">
             {data.runs.map((run) => (
-              <RunCard key={run.id} run={run} />
+              <RunRow key={run.id} run={run} />
             ))}
           </ul>
         </>
