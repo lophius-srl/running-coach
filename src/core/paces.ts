@@ -45,7 +45,7 @@ export const RACE_PACE_MARGIN = 0.01;
 // Chrono visé plus rapide que la prédiction de plus de 5 % = objectif jugé irréaliste.
 export const UNREALISTIC_TARGET_GAP = 0.05;
 
-function oxygenCost(speedMPerMin: number): number {
+export function oxygenCost(speedMPerMin: number): number {
   return -4.6 + 0.182258 * speedMPerMin + 0.000104 * speedMPerMin ** 2;
 }
 
