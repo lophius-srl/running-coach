@@ -12,6 +12,8 @@ import { Alert, Loading } from "./ui";
 const HEADING_ID = "phone-upload-title";
 const TOKEN_INPUT_ID = "phone-upload-token";
 const API = "/api/personal-token";
+export const SHORTCUT_GUIDE_URL =
+  "https://github.com/lophius-srl/running-coach/blob/main/docs/raccourci-ios.md";
 
 type Load =
   | { status: "loading" }
@@ -61,7 +63,10 @@ export function PhoneUpload() {
       </h2>
       <p className="muted import-help">
         Un jeton personnel permet à un Raccourci iOS d'envoyer tes séances de
-        montre sans te connecter. Le guide du Raccourci arrive bientôt.
+        montre sans te connecter.{" "}
+        <a href={SHORTCUT_GUIDE_URL} target="_blank" rel="noreferrer">
+          Créer le Raccourci « Envoyer à Running Coach »
+        </a>
       </p>
       {load.status === "loading" && <Loading label="Chargement du jeton…" />}
       {load.status === "failed" && (
