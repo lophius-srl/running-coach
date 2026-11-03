@@ -200,7 +200,7 @@ describe("userIdForBearer", () => {
     expect((await status(1)).lastUsedAt).toBeNull();
   });
 
-  it("refuses a token sent in clear instead of its hash lookup", async () => {
+  it("refuses the stored hash presented as a token", async () => {
     // Une empreinte stockée présentée comme jeton ne doit rien ouvrir.
     const { token } = await generate(1);
     const hash = await tokenSha256(token);
