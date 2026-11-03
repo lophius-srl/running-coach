@@ -4,14 +4,7 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import { generateToken, tokenSha256 } from "./token";
-
-export type PersonalTokenStatus = {
-  exists: boolean;
-  createdAt: string | null;
-  lastUsedAt: string | null;
-};
-
-export type GeneratedPersonalToken = { token: string; createdAt: string };
+import type { GeneratedPersonalToken, PersonalTokenStatus } from "./types";
 
 // Regénérer remplace l'ancien jeton : nouvelle date de création, aucune utilisation.
 const UPSERT = `

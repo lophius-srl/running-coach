@@ -4,7 +4,7 @@ import { generateSignedCookie } from "hono/cookie";
 import { app } from "../index";
 import type { Bindings } from "../env";
 import { resetDatabase } from "../test-db";
-import type { GeneratedPersonalToken, PersonalTokenStatus } from "./routes";
+import type { GeneratedPersonalToken, PersonalTokenStatus } from "./types";
 import { generateToken, isWellFormedToken, tokenSha256 } from "./token";
 import { userIdForBearer } from "./verify";
 
