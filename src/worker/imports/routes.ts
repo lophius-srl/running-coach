@@ -23,6 +23,7 @@ import type {
   FitImportResponse,
   ImportedActivity,
   LoggedImportStatus,
+  RecentImportsResponse,
 } from "./types";
 
 const COUNT_RECENT_IMPORTS = `
@@ -57,6 +58,21 @@ const LOG_IMPORTED = `
 
 const LOG_IMPORT =
   "INSERT INTO watch_imports (user_id, status, activity_id) VALUES (?, ?, ?)";
+
+export const RECENT_IMPORTS_LIMIT = 20;
+
+const RECENT_IMPORTS = `
+  SELECT i.id, i.received_at AS receivedAt, i.status, a.start_date AS startDate,
+    a.sport_type AS sportType, a.distance_m AS distanceM, a.moving_time_s AS movingTimeS
+  FROM watch_imports i
+  LEFT JOIN watch_activities a ON a.id = i.activity_id AND a.user_id = i.user_id
+  WHERE i.user_id = ? ORDER BY i.received_at DESC, i.id DESC LIMIT ${RECENT_IMPORTS_LIMIT}`;
+
+type RecentImportRow = {
+  id: number;
+  receivedAt: string;
+  status: LoggedImportStatus;
+} & { [K in keyof ImportedActivity]: ImportedActivity[K] | null };
 
 type StoredActivity = {
   id: number;
@@ -241,4 +257,25 @@ fitImportRoutes.post("/fit", async (c) => {
     // Exception réduite à un statut : rien du fichier ni de l'erreur ne part dans les logs.
     return fixed(c, "error", 500);
   }
+});
+
+// « Derniers imports » de l'onglet Import : session seulement. Le chemin est exempté du middleware
+// (le POST accepte le jeton), donc la route vérifie elle-même la session et ignore tout Bearer.
+fitImportRoutes.get("/fit", async (c) => {
+  const userId = await readSession(c, c.env.SESSION_SECRET);
+  if (userId === null) return c.json({ error: "unauthorized" }, 401);
+  const { results } = await c.env.DB.prepare(RECENT_IMPORTS)
+    .bind(userId)
+    .all<RecentImportRow>();
+  const body: RecentImportsResponse = {
+    imports: results.map(({ id, receivedAt, status, ...activity }) => ({
+      id,
+      receivedAt,
+      status,
+      activity:
+        activity.startDate === null ? null : (activity as ImportedActivity),
+    })),
+  };
+  c.header("Cache-Control", "no-store");
+  return c.json(body);
 });

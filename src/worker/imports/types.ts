@@ -23,3 +23,14 @@ export type FitImportResponse = {
   message: string;
   activity?: ImportedActivity;
 };
+
+// Ligne de GET /api/imports/fit (« Derniers imports ») ; `activity` est null sans séance liée
+// (fichier refusé, quota) ou si la séance a été supprimée.
+export type RecentImport = {
+  id: number;
+  receivedAt: string; // ISO 8601 UTC
+  status: LoggedImportStatus;
+  activity: ImportedActivity | null;
+};
+
+export type RecentImportsResponse = { imports: RecentImport[] };

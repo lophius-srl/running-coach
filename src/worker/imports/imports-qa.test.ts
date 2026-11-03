@@ -202,13 +202,19 @@ describe("token scope", () => {
     expect(await journal()).toEqual([]);
   });
 
-  it.each(["GET", "PUT", "PATCH", "DELETE"])(
-    "exposes nothing on %s /api/imports/fit, with or without credentials",
-    async (method) => {
+  // GET (« Derniers imports », #69) existe mais exige la session : 401 sans elle, jeton compris.
+  it.each([
+    ["GET", 401],
+    ["PUT", 404],
+    ["PATCH", 404],
+    ["DELETE", 404],
+  ])(
+    "exposes nothing on %s /api/imports/fit, with or without the token",
+    async (method, status) => {
       await send(syntheticFit());
       for (const headers of [{}, bearer()]) {
         const response = await app.request(URL, { method, headers }, testEnv);
-        expect(response.status).toBe(404);
+        expect(response.status).toBe(status);
         const text = await response.text();
         expect(text).not.toMatch(/watch|startDate|distance|imported/i);
       }
