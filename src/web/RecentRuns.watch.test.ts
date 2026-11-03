@@ -3,10 +3,8 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import {
-  summarizeRecentRuns,
-  type WatchRow,
-} from "../worker/activities/recent";
+import { summarizeRecentRuns } from "../worker/activities/recent";
+import type { WatchRow } from "../worker/imports/watch-runs";
 import { RecentRuns } from "./RecentRuns";
 
 const NOW_MS = Date.parse("2026-11-04T12:00:00.000Z");

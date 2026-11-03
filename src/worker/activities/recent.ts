@@ -17,17 +17,11 @@ import {
   pairWatchRuns,
   WATCH_RUN_NAME,
   watchRunId,
-  type WatchRunSample,
 } from "../../core/watch-merge";
+import type { WatchRow } from "../imports/watch-runs";
 import { RETENTION_DAYS } from "../sync/rules";
 
 const WINDOW_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
-
-// Séance de la montre, avec les mesures en plus affichées sur la carte (src/worker/goals/fitness).
-export type WatchRow = WatchRunSample & {
-  elapsedTimeS: number;
-  maxHeartrate: number | null;
-};
 
 export type RunSurface = "road" | "trail" | "treadmill";
 export type RunWorkout = "race" | "long" | "intervals";

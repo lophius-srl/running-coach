@@ -6,8 +6,8 @@
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import { APP_TIME_ZONE } from "../goals/rules";
-import type { WatchRow } from "../activities/recent";
-import { parsePayload, runSampleOf, WATCH_RUNS } from "../goals/fitness";
+import { parsePayload, runSampleOf } from "../goals/fitness";
+import { WATCH_RUNS, type WatchRow } from "../imports/watch-runs";
 import { FITNESS_WINDOW_DAYS, mergeRuns } from "../../core/fitness";
 import {
   buildProgression,

@@ -11,7 +11,7 @@ import {
   type RunSample,
 } from "../../core/fitness";
 import { mergeWatchRuns } from "../../core/watch-merge";
-import type { WatchRow } from "../activities/recent";
+import { WATCH_RUNS, type WatchRow } from "../imports/watch-runs";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -23,14 +23,6 @@ const IMPORTED_RUNS = `
   FROM imported_activities WHERE user_id = ? AND start_date >= ?`;
 
 const API_PAYLOADS = "SELECT payload FROM strava_activities WHERE user_id = ?";
-
-// Séances de la montre (WatchRow) : même préfiltre que l'historique importé ; les non-courses sont écartées par mergeWatchRuns.
-export const WATCH_RUNS = `
-  SELECT id, start_date AS startDate, sport_type AS sportType, distance_m AS distanceM,
-    moving_time_s AS movingTimeS, elapsed_time_s AS elapsedTimeS,
-    elevation_gain_m AS elevationGainM, average_heartrate AS averageHeartrate,
-    max_heartrate AS maxHeartrate
-  FROM watch_activities WHERE user_id = ? AND start_date >= ?`;
 
 // Payload brut Strava → objet, ou null s'il est illisible.
 export function parsePayload(payload: string): Record<string, unknown> | null {
