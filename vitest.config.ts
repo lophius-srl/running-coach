@@ -19,6 +19,8 @@ export default defineConfig(async () => {
         },
       }),
     ],
+    // Fixtures FIT binaires importées en data URL base64 (`?inline`) par les tests de src/core/fit.
+    assetsInclude: ["**/*.fit"],
     test: {
       include: ["src/**/*.test.ts"],
     },
