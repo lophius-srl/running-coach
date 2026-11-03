@@ -1085,7 +1085,7 @@ a {
   font-size: var(--font-size-sm);
 }
 
-.badge-warning {
+.badge-error {
   background: var(--color-error-bg);
   color: var(--color-error);
 }

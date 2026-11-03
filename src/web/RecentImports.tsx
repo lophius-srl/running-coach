@@ -19,7 +19,7 @@ export function RecentImportsList({ imports }: { imports: RecentImport[] }) {
         const line = recentImportLine(item);
         return (
           <li key={item.id}>
-            <span className={line.ok ? "badge" : "badge badge-warning"}>
+            <span className={line.ok ? "badge" : "badge badge-error"}>
               {line.status}
             </span>{" "}
             <time className="muted" dateTime={item.receivedAt}>

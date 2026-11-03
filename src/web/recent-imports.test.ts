@@ -63,7 +63,7 @@ describe("RecentImportsList", () => {
       item({ id: 1 }),
     ]);
     expect(html).toContain(
-      '<span class="badge badge-warning">Fichier illisible</span>',
+      '<span class="badge badge-error">Fichier illisible</span>',
     );
     expect(html).toContain('<span class="badge">Importée</span>');
     expect(html).toContain("Trail du 3 nov. 2026 · 10,2 km en 52:10");
