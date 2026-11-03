@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AppNav } from "./AppNav";
 import { GoalView } from "./GoalView";
+import { FitUpload } from "./FitUpload";
 import { HistoryImport } from "./HistoryImport";
 import { PhoneUpload } from "./PhoneUpload";
 import { Layout } from "./Layout";
@@ -87,6 +88,7 @@ function ConnectedApp({ athleteId, onLogout }: ConnectedProps) {
       {view === "history" && (
         <div className="view-stack">
           <HistoryImport />
+          <FitUpload />
           <PhoneUpload />
         </div>
       )}

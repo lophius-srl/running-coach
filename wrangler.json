@@ -19,6 +19,12 @@
       "migrations_dir": "migrations"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "FIT_BUCKET",
+      "bucket_name": "running-coach-fit"
+    }
+  ],
   "triggers": {
     "crons": ["0 4 * * *"]
   },

@@ -14,6 +14,8 @@ const DURABLE_TABLES = [
   "imported_activities",
   "heart_rate_zones",
   "personal_tokens",
+  "watch_activities",
+  "watch_imports",
 ];
 const EPHEMERAL_TABLES = ["strava_activities"];
 const ZONES = JSON.stringify(
@@ -62,6 +64,12 @@ async function seedUserWithEverything() {
     ),
     env.DB.prepare(
       `INSERT INTO personal_tokens (user_id, token_sha256) VALUES (1, '${"a".repeat(64)}')`,
+    ),
+    env.DB.prepare(
+      `INSERT INTO watch_activities (id, user_id, fit_sha256, start_date, sport_type, distance_m, moving_time_s, elapsed_time_s) VALUES (1, 1, '${"b".repeat(64)}', '2026-10-23T10:05:58Z', 'Run', 13106, 6245, 6253)`,
+    ),
+    env.DB.prepare(
+      "INSERT INTO watch_imports (user_id, status, activity_id) VALUES (1, 'imported', 1)",
     ),
   ]);
 }
@@ -329,6 +337,84 @@ describe("personal_tokens", () => {
       /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
     );
     expect(row?.last_used_at).toBeNull();
+  });
+});
+
+describe("watch_activities and watch_imports", () => {
+  beforeEach(async () => {
+    await run(
+      "INSERT INTO users (id, strava_athlete_id) VALUES (1, 42), (2, 43)",
+    );
+  });
+
+  function insertActivity(
+    userId: number,
+    sha: string,
+    startDate: string,
+    distanceM = 10000,
+  ) {
+    return env.DB.prepare(
+      "INSERT INTO watch_activities (user_id, fit_sha256, start_date, sport_type, distance_m, moving_time_s, elapsed_time_s) VALUES (?, ?, ?, 'Run', ?, 3000, 3100)",
+    )
+      .bind(userId, sha, startDate, distanceM)
+      .run();
+  }
+
+  function insertImport(status: string, activityId: number | null = null) {
+    return env.DB.prepare(
+      "INSERT INTO watch_imports (user_id, status, activity_id) VALUES (1, ?, ?)",
+    )
+      .bind(status, activityId)
+      .run();
+  }
+
+  it("reject the same file twice for a user, accept it for another user", async () => {
+    await insertActivity(1, "a".repeat(64), "2026-10-23T10:05:58Z");
+    await expect(
+      insertActivity(1, "a".repeat(64), "2026-10-24T10:05:58Z"),
+    ).rejects.toThrow(/UNIQUE/);
+    await insertActivity(2, "a".repeat(64), "2026-10-23T10:05:58Z");
+    expect(await count("watch_activities")).toBe(2);
+  });
+
+  it("reject two sessions starting at the same time for a user", async () => {
+    await insertActivity(1, "a".repeat(64), "2026-10-23T10:05:58Z");
+    await expect(
+      insertActivity(1, "b".repeat(64), "2026-10-23T10:05:58Z"),
+    ).rejects.toThrow(/UNIQUE/);
+  });
+
+  it("reject a negative distance", async () => {
+    await expect(
+      insertActivity(1, "a".repeat(64), "2026-10-23T10:05:58Z", -1),
+    ).rejects.toThrow(/CHECK/);
+  });
+
+  it("accept only the known import statuses", async () => {
+    for (const status of [
+      "imported",
+      "duplicate",
+      "not_fit",
+      "invalid",
+      "quota",
+    ]) {
+      await insertImport(status);
+    }
+    await expect(insertImport("too_large")).rejects.toThrow(/CHECK/);
+    expect(await count("watch_imports")).toBe(5);
+  });
+
+  it("keep the import log when its activity is deleted", async () => {
+    await insertActivity(1, "a".repeat(64), "2026-10-23T10:05:58Z");
+    await insertImport("imported", 1);
+    await run("DELETE FROM watch_activities");
+    const row = await env.DB.prepare(
+      "SELECT activity_id, received_at FROM watch_imports",
+    ).first<{ activity_id: number | null; received_at: string }>();
+    expect(row?.activity_id).toBeNull();
+    expect(row?.received_at).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+    );
   });
 });
 

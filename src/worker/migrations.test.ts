@@ -34,6 +34,8 @@ describe("D1 migrations", () => {
         "imported_activities",
         "heart_rate_zones",
         "personal_tokens",
+        "watch_activities",
+        "watch_imports",
       ]),
     );
   });
@@ -126,6 +128,22 @@ describe("D1 migrations", () => {
     expect(migration?.queries[0]).toMatch(
       /^\s*(--[^\n]*\n\s*)*CREATE TABLE personal_tokens \(/,
     );
+  });
+
+  // Compatibilité N-1 (ADR 0002) : 0007 ne fait qu'ajouter deux tables et un index.
+  it("add watch_activities and watch_imports without altering existing tables", () => {
+    const migration = env.TEST_MIGRATIONS.find((m) =>
+      m.name.startsWith("0007_"),
+    );
+    expect(migration?.queries).toHaveLength(3);
+    const [activities, imports, index] = migration?.queries ?? [];
+    expect(activities).toMatch(
+      /^\s*(--[^\n]*\n\s*)*CREATE TABLE watch_activities \(/,
+    );
+    expect(imports).toMatch(
+      /^\s*(--[^\n]*\n\s*)*CREATE TABLE watch_imports \(/,
+    );
+    expect(index).toMatch(/^\s*CREATE INDEX watch_imports_user_received_idx /);
   });
 
   it("are idempotent when applied twice", async () => {

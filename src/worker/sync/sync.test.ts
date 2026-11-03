@@ -338,6 +338,24 @@ describe("purgeExpiredActivities", () => {
     expect(await purgeExpiredActivities(env.DB, NOW_MS)).toBe(2);
     expect((await storedActivities()).map((a) => a.id)).toEqual([3, 4]);
   });
+
+  // Séances de la montre (ADR 0005) : données de l'utilisateur, durables, hors purge à 7 jours.
+  it("never deletes watch activities, however old", async () => {
+    await env.DB.prepare(
+      `INSERT INTO watch_activities (user_id, fit_sha256, start_date, sport_type, distance_m,
+        moving_time_s, elapsed_time_s, imported_at)
+       VALUES (1, ?, '2020-01-05T08:00:00Z', 'Run', 10000, 3000, 3000, '2020-01-05T09:00:00.000Z')`,
+    )
+      .bind("a".repeat(64))
+      .run();
+
+    await purgeExpiredActivities(env.DB, NOW_MS);
+
+    const row = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM watch_activities",
+    ).first<{ n: number }>();
+    expect(row?.n).toBe(1);
+  });
 });
 
 describe("runDailySync", () => {

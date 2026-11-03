@@ -1,5 +1,7 @@
 export type Bindings = {
   DB: D1Database;
+  // Fichiers FIT bruts envoyés depuis la montre (ADR 0005), clé fit/<user_id>/<sha256>.fit. Durables.
+  FIT_BUCKET: R2Bucket;
   STRAVA_CLIENT_ID: string;
   STRAVA_CLIENT_SECRET: string;
   STRAVA_WEBHOOK_VERIFY_TOKEN: string;

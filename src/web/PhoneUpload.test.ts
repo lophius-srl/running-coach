@@ -1,7 +1,12 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { FreshToken, PhoneUpload, TokenPanel } from "./PhoneUpload";
+import {
+  FreshToken,
+  PhoneUpload,
+  SHORTCUT_GUIDE_URL,
+  TokenPanel,
+} from "./PhoneUpload";
 
 const TOKEN = `rc_${"A".repeat(43)}`;
 
@@ -10,10 +15,11 @@ function panel(initial: Parameters<typeof TokenPanel>[0]["initial"]) {
 }
 
 describe("PhoneUpload", () => {
-  it("announces the iPhone section and the upcoming Shortcut guide", () => {
+  it("announces the iPhone section and links to the Shortcut guide", () => {
     const html = renderToStaticMarkup(createElement(PhoneUpload));
     expect(html).toContain("Envoi depuis l&#x27;iPhone");
-    expect(html).toContain("Le guide du Raccourci arrive bientôt");
+    expect(html).toContain(`href="${SHORTCUT_GUIDE_URL}"`);
+    expect(html).not.toContain("arrive bientôt");
     expect(html).toContain("Chargement du jeton");
   });
 });
@@ -35,7 +41,7 @@ describe("TokenPanel", () => {
     expect(html).toContain("Créé le");
     expect(html).toContain("Dernière utilisation");
     expect(html).toContain("jamais");
-    expect(html).toContain("Regénérer");
+    expect(html).toContain("Régénérer");
     expect(html).toContain("Révoquer");
     expect(html).not.toContain("<input");
   });
