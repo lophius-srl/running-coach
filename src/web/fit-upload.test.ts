@@ -2,7 +2,10 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FitUpload } from "./FitUpload";
-import { fitUploadOutcome, uploadFit } from "./fit-upload";
+import { fitFileProblem, fitUploadOutcome, uploadFit } from "./fit-upload";
+
+const MIB_1_5 = 1.5 * 1024 * 1024;
+const TOO_LARGE = "Fichier trop gros : 1,5 Mo au maximum pour une séance.";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -35,7 +38,25 @@ describe("fitUploadOutcome", () => {
   );
 });
 
+describe("fitFileProblem", () => {
+  it("accepts a file of exactly 1.5 MiB", () => {
+    expect(fitFileProblem({ size: MIB_1_5 })).toBeNull();
+  });
+
+  it("refuses a larger file with the server's 413 message", () => {
+    expect(fitFileProblem({ size: MIB_1_5 + 1 })).toBe(TOO_LARGE);
+  });
+});
+
 describe("uploadFit", () => {
+  it("does not send a file over 1.5 MiB", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const file = new File([new Uint8Array(MIB_1_5 + 1)], "seance.fit");
+
+    expect(await uploadFit(file)).toEqual({ ok: false, message: TOO_LARGE });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it("posts the file as multipart field `file` to /api/imports/fit", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")

@@ -122,7 +122,7 @@ export function TokenPanel({ initial }: { initial: PersonalTokenStatus }) {
     if (
       token.exists &&
       !window.confirm(
-        "Regénérer le jeton ? L'ancien cessera de fonctionner dans ton Raccourci.",
+        "Régénérer le jeton ? L'ancien cessera de fonctionner dans ton Raccourci.",
       )
     ) {
       return;
@@ -197,7 +197,7 @@ export function TokenPanel({ initial }: { initial: PersonalTokenStatus }) {
           {busy === "generating"
             ? BUSY_LABELS.generating
             : token.exists
-              ? "Regénérer"
+              ? "Régénérer"
               : "Générer mon jeton"}
         </button>
         {token.exists && (
@@ -257,7 +257,7 @@ export function FreshToken({ token }: { token: string }) {
       </div>
       <p className="plan-note">
         Copie-le maintenant : il ne sera plus affiché. En cas de perte,
-        regénère-en un.
+        régénère-en un.
       </p>
       <p className="muted" role="status">
         {copyStatus}

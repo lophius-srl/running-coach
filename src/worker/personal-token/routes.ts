@@ -6,7 +6,7 @@ import type { AppEnv } from "../env";
 import { generateToken, tokenSha256 } from "./token";
 import type { GeneratedPersonalToken, PersonalTokenStatus } from "./types";
 
-// Regénérer remplace l'ancien jeton : nouvelle date de création, aucune utilisation.
+// Régénérer remplace l'ancien jeton : nouvelle date de création, aucune utilisation.
 // Le SELECT sur users ne renvoie aucune ligne pour une session dont l'utilisateur a été supprimé.
 const UPSERT = `
   INSERT INTO personal_tokens (user_id, token_sha256)

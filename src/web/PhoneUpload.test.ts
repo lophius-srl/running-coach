@@ -41,7 +41,7 @@ describe("TokenPanel", () => {
     expect(html).toContain("Créé le");
     expect(html).toContain("Dernière utilisation");
     expect(html).toContain("jamais");
-    expect(html).toContain("Regénérer");
+    expect(html).toContain("Régénérer");
     expect(html).toContain("Révoquer");
     expect(html).not.toContain("<input");
   });
