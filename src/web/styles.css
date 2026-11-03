@@ -1023,14 +1023,16 @@ a {
 
 /* Import de l'historique */
 
-.history-import {
+.history-import,
+.import-section {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4) var(--space-4);
 }
 
-.history-help {
+.history-help,
+.import-help {
   max-width: 70ch;
 }
 

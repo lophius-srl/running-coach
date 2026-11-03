@@ -55,11 +55,11 @@ export function PhoneUpload() {
   }, [attempt]);
 
   return (
-    <section aria-labelledby={HEADING_ID} className="card history-import">
+    <section aria-labelledby={HEADING_ID} className="card import-section">
       <h2 id={HEADING_ID} className="section-title">
         Envoi depuis l'iPhone
       </h2>
-      <p className="muted history-help">
+      <p className="muted import-help">
         Un jeton personnel permet à un Raccourci iOS d'envoyer tes séances de
         montre sans te connecter. Le guide du Raccourci arrive bientôt.
       </p>
@@ -88,11 +88,30 @@ export function PhoneUpload() {
 
 type Busy = "idle" | "generating" | "revoking";
 
+const BUSY_LABELS: Record<Exclude<Busy, "idle">, string> = {
+  generating: "Génération…",
+  revoking: "Révocation…",
+};
+
 export function TokenPanel({ initial }: { initial: PersonalTokenStatus }) {
   const [token, setToken] = useState(initial);
   const [fresh, setFresh] = useState<string | null>(null);
   const [busy, setBusy] = useState<Busy>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState("");
+
+  // Après un échec, le serveur a pu appliquer la demande : on relit l'état. Si le jeton affiché
+  // n'est plus celui du serveur (autre date de création), on le masque.
+  function refreshAfterFailure(message: string) {
+    setError(message);
+    fetchStatus().then(
+      (status) => {
+        if (status.createdAt !== token.createdAt) setFresh(null);
+        setToken(status);
+      },
+      () => undefined,
+    );
+  }
 
   async function generate() {
     if (
@@ -105,6 +124,7 @@ export function TokenPanel({ initial }: { initial: PersonalTokenStatus }) {
     }
     setBusy("generating");
     setError(null);
+    setNotice("");
     try {
       const created = await createToken();
       setFresh(created.token);
@@ -113,8 +133,9 @@ export function TokenPanel({ initial }: { initial: PersonalTokenStatus }) {
         createdAt: created.createdAt,
         lastUsedAt: null,
       });
+      setNotice("Nouveau jeton généré.");
     } catch {
-      setError("Impossible de générer le jeton. Réessaie.");
+      refreshAfterFailure("Impossible de générer le jeton. Réessaie.");
     }
     setBusy("idle");
   }
@@ -129,12 +150,14 @@ export function TokenPanel({ initial }: { initial: PersonalTokenStatus }) {
     }
     setBusy("revoking");
     setError(null);
+    setNotice("");
     try {
       await revokeToken();
       setFresh(null);
       setToken({ exists: false, createdAt: null, lastUsedAt: null });
+      setNotice("Jeton révoqué.");
     } catch {
-      setError("Impossible de révoquer le jeton. Réessaie.");
+      refreshAfterFailure("Impossible de révoquer le jeton. Réessaie.");
     }
     setBusy("idle");
   }
@@ -166,7 +189,11 @@ export function TokenPanel({ initial }: { initial: PersonalTokenStatus }) {
           disabled={busy !== "idle"}
           onClick={generate}
         >
-          {token.exists ? "Regénérer" : "Générer mon jeton"}
+          {busy === "generating"
+            ? BUSY_LABELS.generating
+            : token.exists
+              ? "Regénérer"
+              : "Générer mon jeton"}
         </button>
         {token.exists && (
           <button
@@ -175,10 +202,13 @@ export function TokenPanel({ initial }: { initial: PersonalTokenStatus }) {
             disabled={busy !== "idle"}
             onClick={revoke}
           >
-            Révoquer
+            {busy === "revoking" ? BUSY_LABELS.revoking : "Révoquer"}
           </button>
         )}
       </div>
+      <p className="muted" role="status">
+        {notice}
+      </p>
     </>
   );
 }
@@ -186,6 +216,9 @@ export function TokenPanel({ initial }: { initial: PersonalTokenStatus }) {
 export function FreshToken({ token }: { token: string }) {
   const input = useRef<HTMLInputElement>(null);
   const [copyStatus, setCopyStatus] = useState("");
+
+  // Focus sur le jeton dès qu'il apparaît : il est sélectionné, prêt à copier.
+  useEffect(() => input.current?.focus(), [token]);
 
   async function copy() {
     try {
