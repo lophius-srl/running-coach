@@ -26,7 +26,7 @@ describe("recentImportLine", () => {
       receivedAt: "mar. 3 nov., 10:10",
       status: "Importée",
       ok: true,
-      session: "Trail du 3 nov. 2026 · 10,20 km en 52:10",
+      session: "Trail du 3 nov. 2026 · 10,2 km en 52:10",
     });
   });
 
@@ -66,7 +66,7 @@ describe("RecentImportsList", () => {
       '<span class="badge badge-warning">Fichier illisible</span>',
     );
     expect(html).toContain('<span class="badge">Importée</span>');
-    expect(html).toContain("Trail du 3 nov. 2026 · 10,20 km en 52:10");
+    expect(html).toContain("Trail du 3 nov. 2026 · 10,2 km en 52:10");
     expect(html.match(/<li>/g)).toHaveLength(2);
   });
 });

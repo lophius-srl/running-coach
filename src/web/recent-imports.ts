@@ -1,12 +1,16 @@
 // « Derniers imports » de l'onglet Import (ADR 0005) : lecture et libellés, testés sans React.
 
-import { formatClock, formatSessionDay } from "../worker/imports/messages";
+import {
+  formatClock,
+  formatKm,
+  formatSessionDay,
+} from "../worker/imports/messages";
 import type {
   LoggedImportStatus,
   RecentImport,
   RecentImportsResponse,
 } from "../worker/imports/types";
-import { formatDistance, formatStartDate } from "./format";
+import { formatStartDate } from "./format";
 
 export const IMPORT_STATUS_LABELS: Record<LoggedImportStatus, string> = {
   imported: "Importée",
@@ -30,7 +34,7 @@ export type RecentImportLine = {
   receivedAt: string; // date de réception lisible
   status: string;
   ok: boolean;
-  session: string | null; // « Trail du 3 nov. 2026 · 10,20 km en 52:10 »
+  session: string | null; // « Trail du 3 nov. 2026 · 10,2 km en 52:10 », comme le Raccourci
 };
 
 export function recentImportLine(
@@ -46,7 +50,7 @@ export function recentImportLine(
       activity === null
         ? null
         : `${SPORT_LABELS[activity.sportType] ?? "Séance"} du ${formatSessionDay(activity.startDate)}` +
-          ` · ${formatDistance(activity.distanceM)} en ${formatClock(activity.movingTimeS)}`,
+          ` · ${formatKm(activity.distanceM)} en ${formatClock(activity.movingTimeS)}`,
   };
 }
 
