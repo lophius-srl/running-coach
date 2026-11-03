@@ -1,5 +1,6 @@
 // Règles pures du tableau « mes runs des 7 derniers jours » (sans I/O).
-// Lit le payload brut Strava stocké par la synchro et n'en garde que les champs affichés.
+// Lit le payload brut Strava stocké par la synchro et n'en garde que les champs affichés, puis y
+// fusionne les séances de la montre (ADR 0005) : mesures de la montre, autres champs de Strava.
 
 import { elevationPerKm } from "../../core/elevation";
 import { runVdot } from "../../core/fitness";
@@ -11,16 +12,29 @@ import {
   weekShare,
   type PaceZone,
 } from "../../core/run-insights";
+import {
+  isWatchOnly,
+  pairWatchRuns,
+  WATCH_RUN_NAME,
+  watchRunId,
+  type WatchRunSample,
+} from "../../core/watch-merge";
 import { RETENTION_DAYS } from "../sync/rules";
 
 const WINDOW_MS = RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+// Séance de la montre, avec les mesures en plus affichées sur la carte (src/worker/goals/fitness).
+export type WatchRow = WatchRunSample & {
+  elapsedTimeS: number;
+  maxHeartrate: number | null;
+};
 
 export type RunSurface = "road" | "trail" | "treadmill";
 export type RunWorkout = "race" | "long" | "intervals";
 
 // Champs lus dans le payload Strava. Un champ absent, d'un autre type, négatif ou non fini → null.
 export type ParsedRun = {
-  id: number;
+  id: number; // id Strava ; négatif pour une séance montre sans équivalent Strava (pas de lien)
   name: string;
   startDate: string; // ISO 8601, tel que renvoyé par Strava (start_date, UTC)
   // Heure locale du départ (start_date_local) : Strava la suffixe d'un faux « Z », elle s'affiche
@@ -92,6 +106,10 @@ const count = (value: unknown) =>
   Number.isSafeInteger(value) && (value as number) >= 0
     ? (value as number)
     : null;
+
+// Pauses : temps écoulé − temps de déplacement, jamais négatif.
+const pauseOf = (elapsedTimeS: number | null, movingTimeS: number) =>
+  elapsedTimeS === null ? null : Math.max(0, elapsedTimeS - movingTimeS);
 
 const WORKOUTS = new Map<unknown, RunWorkout>([
   [1, "race"],
@@ -174,8 +192,7 @@ export function parseRun(payload: string): ParsedRun | null {
     distanceM: distance,
     movingTimeS: moving_time,
     elapsedTimeS,
-    pauseS:
-      elapsedTimeS === null ? null : Math.max(0, elapsedTimeS - moving_time),
+    pauseS: pauseOf(elapsedTimeS, moving_time),
     paceSPerKm: paceSecondsPerKm(distance, moving_time),
     maxPaceSPerKm: maxPace(positive(raw.max_speed), distance, moving_time),
     averageHeartrate: positive(raw.average_heartrate),
@@ -229,17 +246,86 @@ function elevationTotal(runs: ParsedRun[]): ElevationTotal {
   };
 }
 
+// Carte Strava enrichie des mesures de la montre ; champs Strava en repli quand la montre n'en a
+// pas. L'heure locale est décalée du même écart que le départ.
+function withWatch(run: ParsedRun, watch: WatchRow): ParsedRun {
+  const shiftMs = Date.parse(watch.startDate) - Date.parse(run.startDate);
+  const local =
+    run.startDateLocal === null
+      ? null
+      : new Date(Date.parse(run.startDateLocal) + shiftMs)
+          .toISOString()
+          .replace(/\.\d{3}Z$/, "Z");
+  const elevationGainM = watch.elevationGainM ?? run.elevationGainM;
+  return {
+    ...run,
+    startDate: watch.startDate,
+    startDateLocal: local,
+    distanceM: watch.distanceM,
+    movingTimeS: watch.movingTimeS,
+    elapsedTimeS: watch.elapsedTimeS,
+    pauseS: pauseOf(watch.elapsedTimeS, watch.movingTimeS),
+    paceSPerKm: paceSecondsPerKm(watch.distanceM, watch.movingTimeS),
+    averageHeartrate: watch.averageHeartrate ?? run.averageHeartrate,
+    maxHeartrate: watch.maxHeartrate ?? run.maxHeartrate,
+    elevationGainM,
+    elevationPerKm: elevationPerKm(elevationGainM, watch.distanceM),
+  };
+}
+
+// Carte d'une séance montre sans équivalent Strava : les champs propres à Strava restent vides.
+function watchOnlyRun(watch: WatchRow): ParsedRun {
+  return {
+    id: watchRunId(watch.id),
+    name: WATCH_RUN_NAME,
+    startDate: watch.startDate,
+    startDateLocal: null,
+    sportType: watch.sportType,
+    surface: surface(watch.sportType, false),
+    workout: null,
+    distanceM: watch.distanceM,
+    movingTimeS: watch.movingTimeS,
+    elapsedTimeS: watch.elapsedTimeS,
+    pauseS: pauseOf(watch.elapsedTimeS, watch.movingTimeS),
+    paceSPerKm: paceSecondsPerKm(watch.distanceM, watch.movingTimeS),
+    maxPaceSPerKm: null,
+    averageHeartrate: watch.averageHeartrate,
+    maxHeartrate: watch.maxHeartrate,
+    cadenceSpm: null,
+    elevationGainM: watch.elevationGainM,
+    elevationPerKm: elevationPerKm(watch.elevationGainM, watch.distanceM),
+    elevLowM: null,
+    elevHighM: null,
+    sufferScore: null,
+    prCount: null,
+    achievementCount: null,
+    kudosCount: null,
+  };
+}
+
+// Cartes Strava et séances montre fusionnées (src/core/watch-merge), avant le filtre des 7 jours.
+function mergedRuns(payloads: string[], watch: WatchRow[]): ParsedRun[] {
+  const parsed = payloads
+    .map(parseRun)
+    .filter((run): run is ParsedRun => run !== null);
+  return pairWatchRuns(parsed, watch).map((pair) => {
+    if (isWatchOnly(pair)) return watchOnlyRun(pair.watch);
+    return pair.watch === null
+      ? pair.strava
+      : withWatch(pair.strava, pair.watch);
+  });
+}
+
 // Courses parties dans les 7 derniers jours, de la plus récente à la plus ancienne (à départ
 // identique, id décroissant pour un ordre stable), leurs indicateurs et leurs totaux.
 export function summarizeRecentRuns(
   payloads: string[],
   nowMs: number,
   context: RunContext = { vdot: null, heartRateZones: null },
+  watch: WatchRow[] = [],
 ): RecentRuns {
   const windowStart = nowMs - WINDOW_MS;
-  const runs = payloads
-    .map(parseRun)
-    .filter((run): run is ParsedRun => run !== null)
+  const runs = mergedRuns(payloads, watch)
     .filter((run) => {
       const startMs = Date.parse(run.startDate);
       return startMs >= windowStart && startMs <= nowMs;

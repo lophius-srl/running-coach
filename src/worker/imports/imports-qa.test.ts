@@ -574,7 +574,8 @@ describe("existing computations", () => {
     return bodies;
   }
 
-  it("ignore watch sessions, runs and rides alike", async () => {
+  // Depuis #69, les courses de la montre sont fusionnées (src/core/watch-merge) ; le reste est ignoré.
+  it("ignore non-run watch sessions but merges watch runs", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-04T12:00:00Z"));
     await env.DB.prepare(
@@ -584,7 +585,6 @@ describe("existing computations", () => {
     const cookie = await sessionCookie(1);
     const before = await readAll(cookie);
 
-    await send(syntheticFit({ sport: 1, distanceCm: 1_234_500 }));
     await send(
       syntheticFit({
         sport: 2,
@@ -592,8 +592,19 @@ describe("existing computations", () => {
         start: "2026-11-03T15:00:00Z",
       }),
     );
-
-    expect(await activities()).toHaveLength(2);
     expect(await readAll(cookie)).toEqual(before);
+
+    await send(syntheticFit({ sport: 1, distanceCm: 1_234_500 }));
+    expect(await activities()).toHaveLength(2);
+    const after = await readAll(cookie);
+    const week = JSON.parse(after["/api/activities"]) as {
+      runs: { id: number; name: string; distanceM: number }[];
+    };
+    expect(week.runs).toHaveLength(1);
+    expect(week.runs[0]).toMatchObject({
+      name: "Séance Suunto",
+      distanceM: 12_345,
+    });
+    expect(week.runs[0].id).toBeLessThan(0);
   });
 });

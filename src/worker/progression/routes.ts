@@ -1,12 +1,13 @@
 // Progression (issue #61) : GET /api/progression?period=3m|6m|1y|all&group=week|month.
 // Historique importé (ADR 0004) + activités API des 7 derniers jours, fusionnés par id (l'API
-// l'emporte). Séries calculées à la lecture par src/core/progression.ts : jamais stockées,
+// l'emporte), puis séances de la montre (ADR 0005, src/core/watch-merge). Séries calculées à la lecture par src/core/progression.ts : jamais stockées,
 // jamais envoyées à un LLM (ADR 0003).
 
 import { Hono } from "hono";
 import type { AppEnv } from "../env";
 import { APP_TIME_ZONE } from "../goals/rules";
-import { parsePayload, runSampleOf } from "../goals/fitness";
+import type { WatchRow } from "../activities/recent";
+import { parsePayload, runSampleOf, WATCH_RUNS } from "../goals/fitness";
 import { FITNESS_WINDOW_DAYS, mergeRuns } from "../../core/fitness";
 import {
   buildProgression,
@@ -19,6 +20,7 @@ import {
   type ProgressionRun,
 } from "../../core/progression";
 import { RUN_TYPES } from "../../core/run-types";
+import { mergeWatchRuns } from "../../core/watch-merge";
 
 // Préfiltre large (niveau glissant : 8 semaines avant la première période, +1 jour de marge).
 const IMPORTED_RUNS = `
@@ -75,15 +77,19 @@ progressionRoutes.get("/", async (c) => {
       : new Date(startMs - (FITNESS_WINDOW_DAYS + 1) * DAY_MS).toISOString();
   const db = c.env.DB;
   const userId = c.get("userId");
-  const [imported, last, api] = await db.batch<unknown>([
+  const [imported, last, api, watchRows] = await db.batch<unknown>([
     db.prepare(IMPORTED_RUNS).bind(userId, since),
     db.prepare(LAST_IMPORTED).bind(userId),
     db.prepare(API_PAYLOADS).bind(userId),
+    db.prepare(WATCH_RUNS).bind(userId, since),
   ]);
   const apiRuns = (api.results as { payload: string }[])
     .map((row) => stravaProgressionRun(row.payload))
     .filter((run) => run !== null);
-  const runs = mergeRuns(imported.results as ProgressionRun[], apiRuns);
+  const runs = mergeWatchRuns(
+    mergeRuns(imported.results as ProgressionRun[], apiRuns),
+    watchRows.results as WatchRow[],
+  );
   const lastRow = last.results[0] as
     { lastRun: string | null; lastImport: string | null } | undefined;
   const lastImportedRunDate = lastRow?.lastRun ?? null;
@@ -94,7 +100,7 @@ progressionRoutes.get("/", async (c) => {
     buckets: buildProgression(runs, period, group, nowMs, APP_TIME_ZONE),
     lastRunDate: latest([
       lastImportedRunDate,
-      ...apiRuns
+      ...runs
         .filter((run) => RUN_TYPES.has(run.sportType))
         .map((run) => run.startDate),
     ]),

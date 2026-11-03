@@ -207,6 +207,14 @@ describe("RecentRuns card of a run", () => {
   it("hides the altitude when only one bound is known", () => {
     expect(runDetails(render([run({ elevLowM: 10 })]))).toEqual([]);
   });
+
+  it("has no Strava link for a watch session without Strava (negative id)", () => {
+    const html = render([run({ id: -7, name: "Séance Suunto" })]);
+
+    expect(html).toContain("Séance Suunto");
+    expect(html).not.toContain("View on Strava");
+    expect(html).not.toContain("strava.com/activities");
+  });
 });
 
 describe("RecentRuns elevation gain of a run", () => {

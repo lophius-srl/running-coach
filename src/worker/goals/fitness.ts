@@ -1,5 +1,6 @@
 // Lecture des courses servant à estimer le niveau (#46) : historique importé (ADR 0004) et
-// activités Strava API des 7 derniers jours. Le niveau est calculé à la volée par src/core/fitness,
+// activités Strava API des 7 derniers jours fusionnés par id, puis séances de la montre (ADR 0005,
+// src/core/watch-merge : mesures de la montre, nom et id de Strava). Le niveau est calculé à la volée par src/core/fitness,
 // jamais stocké ni envoyé à un LLM (ADR 0003).
 
 import {
@@ -9,6 +10,8 @@ import {
   type Fitness,
   type RunSample,
 } from "../../core/fitness";
+import { mergeWatchRuns } from "../../core/watch-merge";
+import type { WatchRow } from "../activities/recent";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -20,6 +23,14 @@ const IMPORTED_RUNS = `
   FROM imported_activities WHERE user_id = ? AND start_date >= ?`;
 
 const API_PAYLOADS = "SELECT payload FROM strava_activities WHERE user_id = ?";
+
+// Séances de la montre (WatchRow) : même préfiltre que l'historique importé ; les non-courses sont écartées par mergeWatchRuns.
+export const WATCH_RUNS = `
+  SELECT id, start_date AS startDate, sport_type AS sportType, distance_m AS distanceM,
+    moving_time_s AS movingTimeS, elapsed_time_s AS elapsedTimeS,
+    elevation_gain_m AS elevationGainM, average_heartrate AS averageHeartrate,
+    max_heartrate AS maxHeartrate
+  FROM watch_activities WHERE user_id = ? AND start_date >= ?`;
 
 // Payload brut Strava → objet, ou null s'il est illisible.
 export function parsePayload(payload: string): Record<string, unknown> | null {
@@ -61,28 +72,28 @@ export function runSampleOf(data: Record<string, unknown>): RunSample | null {
   };
 }
 
-// Courses des 8 dernières semaines (+1 jour de marge), historique importé et API fusionnés,
-// avec les payloads Strava bruts (lus une seule fois pour le tableau des runs récents).
+// Courses des 8 dernières semaines (+1 jour de marge), historique importé, API et montre fusionnés,
+// avec les payloads Strava bruts et les séances montre (lus une seule fois pour « Ma semaine »).
 export async function loadRunsAndPayloads(
   db: D1Database,
   userId: number,
   nowMs: number,
-): Promise<{ runs: RunSample[]; payloads: string[] }> {
+): Promise<{ runs: RunSample[]; payloads: string[]; watch: WatchRow[] }> {
   const since = new Date(
     nowMs - (FITNESS_WINDOW_DAYS + 1) * DAY_MS,
   ).toISOString();
-  const [imported, api] = await db.batch<RunSample | { payload: string }>([
+  const [imported, api, watchRows] = await db.batch<unknown>([
     db.prepare(IMPORTED_RUNS).bind(userId, since),
     db.prepare(API_PAYLOADS).bind(userId),
+    db.prepare(WATCH_RUNS).bind(userId, since),
   ]);
+  const watch = watchRows.results as WatchRow[];
   const payloads = (api.results as { payload: string }[]).map(
     (row) => row.payload,
   );
   const apiRuns = payloads.map(stravaRunSample).filter((run) => run !== null);
-  return {
-    runs: mergeRuns(imported.results as RunSample[], apiRuns),
-    payloads,
-  };
+  const stravaRuns = mergeRuns(imported.results as RunSample[], apiRuns);
+  return { runs: mergeWatchRuns(stravaRuns, watch), payloads, watch };
 }
 
 export async function loadRuns(
