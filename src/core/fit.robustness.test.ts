@@ -2,7 +2,7 @@
 // Fuzzing déterministe (graine fixe), structures limites et temps de décodage borné.
 import { describe, expect, it } from "vitest";
 import { decodeFitSummary, fitCrc, inspectFit, type FitResult } from "./fit";
-import { encodeFit, fitTime, wrapFitData } from "./fit-test-encoder";
+import { encodeFit, fitTime, wrapFitData } from "./fit.test-helpers";
 import suuntoRunDataUrl from "./fixtures/fit/suunto-run-anonymized.fit?inline";
 
 declare const performance: { now(): number };
@@ -20,6 +20,9 @@ const SPORT_TYPES = [
   "Swim",
   "Workout",
 ];
+
+// Temps chronométré de 30 min : sans distance ni temps, une session est vide (invalid).
+const TIMER = { num: 8, type: "uint32" as const, value: 1_800_000 };
 
 const BASE64 =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -223,12 +226,17 @@ describe("décodeur FIT face à des structures limites", () => {
   });
 
   it("lit une session définie avec 255 champs", () => {
-    // Champs de type byte (non lus), sauf avg_heart_rate : start_time vient alors de file_id.
-    const fields = Array.from({ length: 255 }, (_, num) => ({
-      num,
-      type: num === 16 ? ("uint8" as const) : ("byte" as const),
-      value: num === 16 ? 150 : 7,
-    }));
+    // Champs de type byte (non lus), sauf avg_heart_rate et total_timer_time : start_time vient
+    // alors de file_id.
+    const fields = Array.from({ length: 255 }, (_, num) =>
+      num === 8
+        ? TIMER
+        : {
+            num,
+            type: num === 16 ? ("uint8" as const) : ("byte" as const),
+            value: num === 16 ? 150 : 7,
+          },
+    );
     const bytes = encodeFit([
       {
         global: 0,
@@ -251,6 +259,7 @@ describe("décodeur FIT face à des structures limites", () => {
           { num: 16, type: "uint8", value: 0, size: 0 }, // avg_heart_rate de taille 0
           { num: 9, type: "uint32", value: 0x010203, size: 3 }, // distance sur 3 octets
           { num: 17, type: "uint8", value: 181 },
+          TIMER,
         ],
       },
     ]);
@@ -265,7 +274,7 @@ describe("décodeur FIT face à des structures limites", () => {
       { global: 20, fields: [{ num: 253, type: "uint32", value: 1 }] },
       {
         global: 18,
-        fields: [{ num: 2, type: "uint32", value: fitTime(START) }],
+        fields: [{ num: 2, type: "uint32", value: fitTime(START) }, TIMER],
       },
       { global: 20, fields: [{ num: 3, type: "uint8", value: 140 }] },
     ]);
@@ -287,7 +296,7 @@ describe("décodeur FIT face à des structures limites", () => {
       {
         global: 18,
         local: 1,
-        fields: [{ num: 2, type: "uint32", value: fitTime(START) }],
+        fields: [{ num: 2, type: "uint32", value: fitTime(START) }, TIMER],
       },
     ]);
     expect(decodeFitSummary(bytes)).toMatchObject({
@@ -301,7 +310,7 @@ describe("décodeur FIT face à des structures limites", () => {
       {
         global: 18,
         local: 4,
-        fields: [{ num: 2, type: "uint32", value: fitTime(START) }],
+        fields: [{ num: 2, type: "uint32", value: fitTime(START) }, TIMER],
       },
     ]);
     // 0xE0 : horodatage compressé, type local 3, jamais défini.
@@ -322,6 +331,7 @@ describe("valeurs absentes ou invalides de la session", () => {
           { num: 2, type: "uint32", value: fitTime(START) },
           { num: 5, type: "enum", value: 1 },
           { num: 6, type: "enum", value: 3 },
+          TIMER,
         ],
       },
     ]);
@@ -336,7 +346,7 @@ describe("valeurs absentes ou invalides de la session", () => {
       { global: 12, local: 1, fields: [{ num: 0, type: "enum", value: 1 }] },
       {
         global: 18,
-        fields: [{ num: 2, type: "uint32", value: fitTime(START) }],
+        fields: [{ num: 2, type: "uint32", value: fitTime(START) }, TIMER],
       },
     ]);
     expect(decodeFitSummary(bytes)).toMatchObject({
@@ -349,7 +359,7 @@ describe("valeurs absentes ou invalides de la session", () => {
     const bytes = encodeFit([
       {
         global: 18,
-        fields: [{ num: 2, type: "uint32", value: fitTime(START) }],
+        fields: [{ num: 2, type: "uint32", value: fitTime(START) }, TIMER],
       },
     ]);
     expect(decodeFitSummary(bytes)).toMatchObject({
@@ -366,7 +376,7 @@ describe("valeurs absentes ou invalides de la session", () => {
   it("répond invalid sans heure de départ ni time_created", () => {
     const bytes = encodeFit([
       { global: 0, fields: [{ num: 1, type: "uint16", value: 23 }] },
-      { global: 18, fields: [{ num: 2, type: "uint32", value: null }] },
+      { global: 18, fields: [{ num: 2, type: "uint32", value: null }, TIMER] },
     ]);
     expect(decodeFitSummary(bytes)).toEqual({ ok: false, error: "invalid" });
   });
@@ -380,7 +390,7 @@ describe("valeurs absentes ou invalides de la session", () => {
       {
         global: 18,
         local: 1,
-        fields: [{ num: 2, type: "uint32", value: null }],
+        fields: [{ num: 2, type: "uint32", value: null }, TIMER],
       },
     ]);
     expect(decodeFitSummary(bytes)).toMatchObject({
@@ -418,6 +428,7 @@ describe("valeurs absentes ou invalides de la session", () => {
           { num: 16, type: "uint8", value: 0xff },
           { num: 17, type: "uint8", value: 0xff },
           { num: 22, type: "uint16", value: 0xffff },
+          TIMER,
         ],
       },
     ]);

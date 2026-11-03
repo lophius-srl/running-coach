@@ -5,3 +5,14 @@ export const RUN_TYPES: ReadonlySet<string> = new Set([
   "TrailRun",
   "VirtualRun",
 ]);
+
+// Vocabulaire Strava (`sport_type`) des séances importées d'un fichier FIT (ADR 0005).
+export type StravaSportType =
+  | "Run"
+  | "TrailRun"
+  | "VirtualRun"
+  | "Ride"
+  | "Walk"
+  | "Hike"
+  | "Swim"
+  | "Workout";

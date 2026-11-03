@@ -7,20 +7,11 @@
 //   signature ".FIT", en-têtes d'enregistrement normal / à horodatage compressé, définitions).
 // - SDK FIT JavaScript officiel de Garmin, @garmin/fitsdk 21.218.0 (archive npm, Profile 21.218.0) :
 //   decoder.js (masques 0x80 / 0x40 / 0x20 / 0x0F, architecture 0 = little endian, CRC d'en-tête
-//   ignoré s'il vaut 0, CRC de fichier sur en-tête + données), crc-calculator.js (table CRC-16),
-//   fit.js (types de base et valeurs invalides), utils.js (époque FIT 631065600 s = 1989-12-31Z),
-//   profile.js (numéros de messages et de champs, échelles, énumérations sport / sub_sport /
-//   manufacturer).
-
-export type StravaSportType =
-  | "Run"
-  | "TrailRun"
-  | "VirtualRun"
-  | "Ride"
-  | "Walk"
-  | "Hike"
-  | "Swim"
-  | "Workout";
+//   ignoré s'il vaut 0, CRC de fichier sur en-tête + données), crc-calculator.js (CRC-16, ici sous
+//   sa forme CRC-16/ARC à 256 entrées), fit.js (types de base et valeurs invalides), utils.js
+//   (époque FIT 631065600 s = 1989-12-31Z), profile.js (numéros de messages et de champs, types,
+//   échelles, énumérations sport / sub_sport / manufacturer, date_time < 0x10000000 = temps système).
+import type { StravaSportType } from "./run-types";
 
 export type FitSummary = {
   startDate: string; // ISO 8601 UTC à la seconde, ex. "2026-10-23T10:05:58Z"
@@ -49,11 +40,8 @@ export type FitScan = {
 };
 
 const FIT_EPOCH_S = 631065600; // 1989-12-31T00:00:00Z
+const DATE_TIME_MIN = 0x10000000; // en dessous : secondes depuis l'allumage de l'appareil
 const CRC_SIZE = 2;
-
-const MESG_FILE_ID = 0;
-const MESG_SPORT = 12;
-const MESG_SESSION = 18;
 
 const SPORT_RUNNING = 1;
 const SPORT_CYCLING = 2;
@@ -70,39 +58,85 @@ const MANUFACTURERS: ReadonlyMap<number, string> = new Map([
   [32, "wahoo"],
   [95, "stryd"],
   [123, "polar"],
-  [129, "coros"],
+  [129, "coros"], // corosByte
   [260, "zwift"],
+  [294, "coros"],
 ]);
 
-// Types de base entiers non signés lus par le décodeur : taille et valeur invalide (fit.js).
-const UNSIGNED_BASE_TYPES: ReadonlyMap<
-  number,
-  { size: number; invalid: number }
-> = new Map([
-  [0x00, { size: 1, invalid: 0xff }], // enum
-  [0x02, { size: 1, invalid: 0xff }], // uint8
-  [0x04, { size: 2, invalid: 0xffff }], // uint16
-  [0x06, { size: 4, invalid: 0xffffffff }], // uint32
-  [0x0a, { size: 1, invalid: 0 }], // uint8z
-  [0x0b, { size: 2, invalid: 0 }], // uint16z
-  [0x0c, { size: 4, invalid: 0 }], // uint32z
-]);
-
-type FieldDefinition = {
-  num: number;
-  offset: number;
-  size: number;
-  baseType: number;
+// Types de base attendus (fit.js) : taille et valeur invalide.
+const ENUM = 0x00;
+const UINT8 = 0x02;
+const UINT16 = 0x04;
+const UINT32 = 0x06;
+const BASE_TYPES: Record<number, { size: number; invalid: number }> = {
+  [ENUM]: { size: 1, invalid: 0xff },
+  [UINT8]: { size: 1, invalid: 0xff },
+  [UINT16]: { size: 2, invalid: 0xffff },
+  [UINT32]: { size: 4, invalid: 0xffffffff },
 };
+
+// Champs lus, par message : [numéro de champ, type de base attendu] ; l'indice est le « slot ».
+type Wanted = readonly (readonly [number, number])[];
+const FILE_ID_FIELDS: Wanted = [
+  [1, UINT16], // manufacturer
+  [4, UINT32], // time_created
+];
+const SPORT_FIELDS: Wanted = [
+  [0, ENUM], // sport
+  [1, ENUM], // sub_sport
+];
+const SESSION_FIELDS: Wanted = [
+  [253, UINT32], // timestamp
+  [2, UINT32], // start_time
+  [5, ENUM], // sport
+  [6, ENUM], // sub_sport
+  [7, UINT32], // total_elapsed_time (s × 1000)
+  [8, UINT32], // total_timer_time (s × 1000)
+  [9, UINT32], // total_distance (m × 100)
+  [16, UINT8], // avg_heart_rate
+  [17, UINT8], // max_heart_rate
+  [22, UINT16], // total_ascent (m)
+];
+const [MANUFACTURER, TIME_CREATED] = [0, 1];
+const [SPORT, SUB_SPORT] = [0, 1];
+const [
+  TIMESTAMP,
+  START_TIME,
+  S_SPORT,
+  S_SUB_SPORT,
+  ELAPSED,
+  TIMER,
+  DISTANCE,
+  AVG_HR,
+  MAX_HR,
+  ASCENT,
+] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+type MessageSpec = { wanted: Wanted; slotOf: Int8Array }; // slotOf[numéro de champ] → slot ou -1
+
+const MESSAGES: ReadonlyMap<number, MessageSpec> = new Map([
+  [0, messageSpec(FILE_ID_FIELDS)],
+  [12, messageSpec(SPORT_FIELDS)],
+  [18, messageSpec(SESSION_FIELDS)],
+]);
+const [MESG_FILE_ID, MESG_SPORT] = [0, 12];
+
+function messageSpec(wanted: Wanted): MessageSpec {
+  const slotOf = new Int8Array(256).fill(-1);
+  wanted.forEach(([num], slot) => (slotOf[num] = slot));
+  return { wanted, slotOf };
+}
 
 type MessageDefinition = {
   globalNum: number;
   littleEndian: boolean;
   size: number; // champs normaux + champs développeur
-  fields: FieldDefinition[]; // vide pour les messages sautés
+  offsets: Int32Array | null; // décalage de chaque slot (-1 : absent) ; null pour un message sauté
+  end: number; // position qui suit la définition
 };
 
 type Session = {
+  timestamp: number | null;
   startTime: number | null;
   sport: number | null;
   subSport: number | null;
@@ -116,20 +150,24 @@ type Session = {
 
 class InvalidFit extends Error {}
 
-const CRC_TABLE = [
-  0x0000, 0xcc01, 0xd801, 0x1400, 0xf001, 0x3c00, 0x2800, 0xe401, 0xa001,
-  0x6c00, 0x7800, 0xb401, 0x5000, 0x9c01, 0x8801, 0x4400,
-];
+// CRC-16 FIT = CRC-16/ARC (polynôme réfléchi 0xA001, valeur initiale 0), table de 256 entrées.
+const CRC_TABLE = buildCrcTable();
 
-// CRC-16 FIT (crc-calculator.js du SDK), calculé quartet par quartet.
+function buildCrcTable(): Uint16Array {
+  const table = new Uint16Array(256);
+  for (let n = 0; n < 256; n++) {
+    let crc = n;
+    for (let bit = 0; bit < 8; bit++)
+      crc = crc & 1 ? (crc >>> 1) ^ 0xa001 : crc >>> 1;
+    table[n] = crc;
+  }
+  return table;
+}
+
 export function fitCrc(bytes: Uint8Array, start: number, end: number): number {
   let crc = 0;
   for (let i = start; i < end; i++) {
-    const byte = bytes[i] ?? 0;
-    let tmp = CRC_TABLE[crc & 0xf] ?? 0;
-    crc = ((crc >> 4) & 0x0fff) ^ tmp ^ (CRC_TABLE[byte & 0xf] ?? 0);
-    tmp = CRC_TABLE[crc & 0xf] ?? 0;
-    crc = ((crc >> 4) & 0x0fff) ^ tmp ^ (CRC_TABLE[(byte >> 4) & 0xf] ?? 0);
+    crc = (crc >>> 8) ^ (CRC_TABLE[(crc ^ (bytes[i] ?? 0)) & 0xff] ?? 0);
   }
   return crc;
 }
@@ -182,77 +220,130 @@ function fail(error: FitError): FitResult {
   return { ok: false, error };
 }
 
+type DecodeState = {
+  manufacturer: number | null;
+  timeCreated: number | null;
+  pendingSport: number | null; // message sport : ne vaut que pour la session qui le suit
+  pendingSubSport: number | null;
+  firstSession: Session | null;
+  runSession: Session | null;
+};
+
+// Boucle chaude : un octet d'en-tête lu et un saut par message, sans allocation ni closure.
 function readRecords(
   view: DataView,
   start: number,
   end: number,
   scan: FitScan,
 ): FitResult {
+  const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
   const definitions: (MessageDefinition | undefined)[] = new Array(16);
-  let manufacturer: number | null = null;
-  let timeCreated: number | null = null;
-  let lastSport: number | null = null;
-  let lastSubSport: number | null = null;
-  let firstSession: Session | null = null;
-  let firstRunSession: Session | null = null;
+  const state: DecodeState = {
+    manufacturer: null,
+    timeCreated: null,
+    pendingSport: null,
+    pendingSubSport: null,
+    firstSession: null,
+    runSession: null,
+  };
   let pos = start;
   while (pos < end) {
-    const header = byteAt(view, pos, end);
-    if ((header & 0x40) !== 0 && (header & 0x80) === 0) {
-      const local = header & 0x0f;
-      [definitions[local], pos] = readDefinition(
-        view,
-        pos,
-        end,
-        (header & 0x20) !== 0,
-      );
+    const header = bytes[pos] ?? 0;
+    if ((header & 0xc0) === 0x40) {
+      const definition = readDefinition(view, pos, end, (header & 0x20) !== 0);
+      definitions[header & 0x0f] = definition;
+      pos = definition.end;
       continue;
     }
     // Horodatage compressé : bit 7, type local sur les bits 5–6 (0 à 3), décalage sur les bits 0–4.
-    const local = (header & 0x80) !== 0 ? (header >> 5) & 0x03 : header & 0x0f;
-    const definition = definitions[local];
-    if (definition === undefined || pos + 1 + definition.size > end)
-      throw new InvalidFit();
+    const definition =
+      definitions[header & 0x80 ? (header >> 5) & 0x03 : header & 0x0f];
+    if (definition === undefined) throw new InvalidFit();
     const data = pos + 1;
     pos = data + definition.size;
-    if (definition.fields.length === 0) {
+    if (pos > end) throw new InvalidFit();
+    if (definition.offsets === null || state.runSession !== null) {
       scan.skippedMessages++;
       continue;
     }
     scan.decodedMessages++;
-    const read = (num: number) => readUnsigned(view, data, definition, num);
-    if (definition.globalNum === MESG_FILE_ID) {
-      manufacturer = read(1);
-      timeCreated = read(4);
-    } else if (definition.globalNum === MESG_SPORT) {
-      lastSport = read(0);
-      lastSubSport = read(1);
-    } else {
-      const session: Session = {
-        startTime: read(2),
-        sport: read(5) ?? lastSport,
-        subSport: read(6) ?? lastSubSport,
-        elapsedMs: read(7),
-        timerMs: read(8),
-        distanceCm: read(9),
-        ascentM: read(22),
-        avgHr: read(16),
-        maxHr: read(17),
-      };
-      firstSession ??= session;
-      if (session.sport === SPORT_RUNNING) firstRunSession ??= session;
-    }
+    decodeMessage(view, data, definition, state);
   }
-  const session = firstRunSession ?? firstSession;
+  const session = state.runSession ?? state.firstSession;
   if (session === null) return fail("no_session");
-  const startTime = session.startTime ?? timeCreated;
-  if (startTime === null) return fail("invalid");
-  return { ok: true, summary: toSummary(session, startTime, manufacturer) };
+  const startTime = startTimeOf(session, state.timeCreated);
+  const durationMs = session.timerMs ?? session.elapsedMs;
+  if (
+    startTime === null ||
+    (durationMs === null && session.distanceCm === null)
+  ) {
+    return fail("invalid");
+  }
+  return {
+    ok: true,
+    summary: toSummary(session, startTime, state.manufacturer),
+  };
 }
 
-function byteAt(view: DataView, pos: number, end: number): number {
-  if (pos >= end) throw new InvalidFit();
-  return view.getUint8(pos);
+function decodeMessage(
+  view: DataView,
+  data: number,
+  definition: MessageDefinition,
+  state: DecodeState,
+): void {
+  if (definition.globalNum === MESG_FILE_ID) {
+    state.manufacturer = readField(
+      view,
+      data,
+      definition,
+      FILE_ID_FIELDS,
+      MANUFACTURER,
+    );
+    state.timeCreated = readField(
+      view,
+      data,
+      definition,
+      FILE_ID_FIELDS,
+      TIME_CREATED,
+    );
+    return;
+  }
+  if (definition.globalNum === MESG_SPORT) {
+    state.pendingSport = readField(view, data, definition, SPORT_FIELDS, SPORT);
+    state.pendingSubSport = readField(
+      view,
+      data,
+      definition,
+      SPORT_FIELDS,
+      SUB_SPORT,
+    );
+    return;
+  }
+  const read = (slot: number) =>
+    readField(view, data, definition, SESSION_FIELDS, slot);
+  const sport =
+    readField(view, data, definition, SESSION_FIELDS, S_SPORT) ??
+    state.pendingSport;
+  const subSport =
+    readField(view, data, definition, SESSION_FIELDS, S_SUB_SPORT) ??
+    state.pendingSubSport;
+  state.pendingSport = null;
+  state.pendingSubSport = null;
+  if (state.firstSession !== null && sport !== SPORT_RUNNING) return;
+  const session: Session = {
+    timestamp: read(TIMESTAMP),
+    startTime: read(START_TIME),
+    sport,
+    subSport,
+    elapsedMs: read(ELAPSED),
+    timerMs: read(TIMER),
+    distanceCm: read(DISTANCE),
+    ascentM: read(ASCENT),
+    avgHr: read(AVG_HR),
+    maxHr: read(MAX_HR),
+  };
+  state.firstSession ??= session;
+  if (sport === SPORT_RUNNING) state.runSession = session;
 }
 
 function readDefinition(
@@ -260,61 +351,81 @@ function readDefinition(
   pos: number,
   end: number,
   hasDeveloperFields: boolean,
-): [MessageDefinition, number] {
+): MessageDefinition {
   if (pos + 6 > end) throw new InvalidFit();
   const littleEndian = view.getUint8(pos + 2) === 0;
   const globalNum = view.getUint16(pos + 3, littleEndian);
   const fieldCount = view.getUint8(pos + 5);
-  const decoded =
-    globalNum === MESG_FILE_ID ||
-    globalNum === MESG_SPORT ||
-    globalNum === MESG_SESSION;
-  const fields: FieldDefinition[] = [];
+  const spec = MESSAGES.get(globalNum);
+  const offsets = spec ? new Int32Array(spec.wanted.length).fill(-1) : null;
   let size = 0;
   let cursor = pos + 6;
   if (cursor + fieldCount * 3 > end) throw new InvalidFit();
   for (let i = 0; i < fieldCount; i++, cursor += 3) {
     const fieldSize = view.getUint8(cursor + 1);
-    if (decoded) {
+    const slot = spec ? (spec.slotOf[view.getUint8(cursor)] ?? -1) : -1;
+    if (offsets && slot >= 0) {
       const baseType = view.getUint8(cursor + 2) & 0x1f;
-      fields.push({
-        num: view.getUint8(cursor),
-        offset: size,
-        size: fieldSize,
-        baseType,
-      });
+      const expected = spec?.wanted[slot]?.[1];
+      const ok =
+        baseType === expected && BASE_TYPES[baseType]?.size === fieldSize;
+      offsets[slot] = ok ? size : -1;
     }
     size += fieldSize;
   }
   if (hasDeveloperFields) {
-    const devCount = byteAt(view, cursor, end);
-    cursor++;
+    if (cursor + 1 > end) throw new InvalidFit();
+    const devCount = view.getUint8(cursor++);
     if (cursor + devCount * 3 > end) throw new InvalidFit();
     for (let i = 0; i < devCount; i++, cursor += 3)
       size += view.getUint8(cursor + 1);
   }
-  return [{ globalNum, littleEndian, size, fields }, cursor];
+  return { globalNum, littleEndian, size, offsets, end: cursor };
 }
 
-// Valeur d'un champ entier non signé ; null si absent, de type inattendu ou invalide (FIT).
-function readUnsigned(
+// Valeur d'un champ lu ; null s'il est absent, d'un type inattendu ou à sa valeur invalide FIT.
+function readField(
   view: DataView,
   data: number,
   definition: MessageDefinition,
-  num: number,
+  wanted: Wanted,
+  slot: number,
 ): number | null {
-  const field = definition.fields.find((candidate) => candidate.num === num);
-  const baseType = field && UNSIGNED_BASE_TYPES.get(field.baseType);
-  if (!field || !baseType || baseType.size !== field.size) return null;
-  const at = data + field.offset;
-  const le = definition.littleEndian;
-  const value =
-    field.size === 1
-      ? view.getUint8(at)
-      : field.size === 2
-        ? view.getUint16(at, le)
-        : view.getUint32(at, le);
-  return value === baseType.invalid ? null : value;
+  const offset = definition.offsets?.[slot] ?? -1;
+  if (offset < 0) return null;
+  const at = data + offset;
+  switch (wanted[slot]?.[1]) {
+    case UINT16: {
+      const value = view.getUint16(at, definition.littleEndian);
+      return value === 0xffff ? null : value;
+    }
+    case UINT32: {
+      const value = view.getUint32(at, definition.littleEndian);
+      return value === 0xffffffff ? null : value;
+    }
+    default: {
+      const value = view.getUint8(at); // enum et uint8
+      return value === 0xff ? null : value;
+    }
+  }
+}
+
+// Heure de départ absolue : start_time, sinon timestamp (fin) − durée, sinon time_created.
+function startTimeOf(
+  session: Session,
+  timeCreated: number | null,
+): number | null {
+  const absolute = (value: number | null) =>
+    value !== null && value >= DATE_TIME_MIN ? value : null;
+  const durationMs = session.elapsedMs ?? session.timerMs;
+  const end = absolute(session.timestamp);
+  const fromEnd =
+    end !== null && durationMs !== null
+      ? end - Math.round(durationMs / 1000)
+      : null;
+  return (
+    absolute(session.startTime) ?? absolute(fromEnd) ?? absolute(timeCreated)
+  );
 }
 
 function toSummary(
@@ -345,7 +456,7 @@ function toSummary(
 }
 
 // Conversion vers le vocabulaire Strava de RUN_TYPES (ADR 0005, « Stockage → Sport »).
-export function toSportType(
+function toSportType(
   sport: number | null,
   subSport: number | null,
 ): StravaSportType {

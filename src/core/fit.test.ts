@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { decodeFitSummary, inspectFit, type FitSummary } from "./fit";
+import { decodeFitSummary, fitCrc, inspectFit, type FitSummary } from "./fit";
 import {
   encodeFit,
   fitTime,
   type FitFieldSpec,
   type FitMessageSpec,
   wrapFitData,
-} from "./fit-test-encoder";
+} from "./fit.test-helpers";
 import suuntoRunDataUrl from "./fixtures/fit/suunto-run-anonymized.fit?inline";
 
+declare const performance: { now(): number };
+
 const START = "2026-11-03T07:30:00Z";
+const MIB_1_5 = 1.5 * 1024 * 1024;
 
 const fileId = (manufacturer: number | null = 23): FitMessageSpec => ({
   global: 0,
@@ -231,6 +234,12 @@ describe("decodeFitSummary", () => {
     });
   });
 
+  it.each([129, 294])("reconnaît Coros (fabricant %s)", (manufacturer) => {
+    expect(summaryOf(encodeFit([fileId(manufacturer), session()])).device).toBe(
+      "coros",
+    );
+  });
+
   it("donne le numéro du fabricant quand il est inconnu", () => {
     expect(summaryOf(encodeFit([fileId(9999), session()])).device).toBe("9999");
   });
@@ -306,6 +315,216 @@ describe("decodeFitSummary", () => {
       ok: false,
       error: "not_fit",
     });
+  });
+});
+
+describe("champs lus avec leur type attendu", () => {
+  it("donne null à un champ d'un autre type de base que celui du profil", () => {
+    const bytes = encodeFit([
+      fileId(),
+      {
+        global: 18,
+        fields: [
+          { num: 2, type: "uint32", value: fitTime(START) },
+          { num: 5, type: "uint8", value: 1 }, // sport : enum attendu
+          { num: 8, type: "uint32", value: 1_800_000 },
+          { num: 9, type: "uint32z", value: 500_000 }, // distance : uint32 attendu
+          { num: 16, type: "uint16", value: 150 }, // FC moyenne : uint8 attendu
+          { num: 22, type: "uint32", value: 40 }, // D+ : uint16 attendu
+        ],
+      },
+    ]);
+    expect(summaryOf(bytes)).toMatchObject({
+      sport: null,
+      distanceM: 0,
+      movingTimeS: 1800,
+      averageHeartrate: null,
+      elevationGainM: null,
+    });
+  });
+});
+
+describe("heure de départ", () => {
+  const sessionAt = (
+    startTime: number | null,
+    timestamp: number | null,
+  ): FitMessageSpec => ({
+    global: 18,
+    local: 1,
+    fields: [
+      { num: 253, type: "uint32", value: timestamp },
+      { num: 2, type: "uint32", value: startTime },
+      { num: 7, type: "uint32", value: 3_600_400 }, // 3 600,4 s
+      { num: 8, type: "uint32", value: 3_500_000 },
+    ],
+  });
+  const created = (time: number | null): FitMessageSpec => ({
+    global: 0,
+    fields: [{ num: 4, type: "uint32", value: time }],
+  });
+  const end = fitTime(START) + 3600;
+
+  it("prend la fin de session moins le temps écoulé sans start_time", () => {
+    const bytes = encodeFit([
+      created(fitTime("2026-11-03T07:00:00Z")),
+      sessionAt(null, end),
+    ]);
+    expect(summaryOf(bytes).startDate).toBe(START);
+  });
+
+  it("ignore les dates relatives (< 0x10000000) et passe à la source suivante", () => {
+    expect(
+      summaryOf(encodeFit([created(fitTime(START)), sessionAt(5000, 9000)]))
+        .startDate,
+    ).toBe(START);
+    expect(summaryOf(encodeFit([sessionAt(5000, end)])).startDate).toBe(START);
+  });
+
+  it("répond invalid sans aucune date absolue", () => {
+    const bytes = encodeFit([created(0x0fffffff), sessionAt(5000, 9000)]);
+    expect(decodeFitSummary(bytes)).toEqual({ ok: false, error: "invalid" });
+  });
+});
+
+describe("séance vide", () => {
+  const sessionWith = (fields: FitFieldSpec[]) =>
+    encodeFit([
+      {
+        global: 18,
+        fields: [{ num: 2, type: "uint32", value: fitTime(START) }, ...fields],
+      },
+    ]);
+
+  it("répond invalid sans distance ni temps", () => {
+    const bytes = sessionWith([
+      { num: 7, type: "uint32", value: null },
+      { num: 8, type: "uint32", value: null },
+      { num: 9, type: "uint32", value: null },
+    ]);
+    expect(decodeFitSummary(bytes)).toEqual({ ok: false, error: "invalid" });
+  });
+
+  it("garde une séance qui n'a que la distance ou que le temps", () => {
+    expect(
+      summaryOf(sessionWith([{ num: 9, type: "uint32", value: 300_000 }])),
+    ).toMatchObject({
+      distanceM: 3000,
+      movingTimeS: 0,
+    });
+    expect(
+      summaryOf(sessionWith([{ num: 8, type: "uint32", value: 60_000 }])),
+    ).toMatchObject({
+      distanceM: 0,
+      movingTimeS: 60,
+    });
+  });
+});
+
+describe("multisport", () => {
+  const sportMessage = (sport: number): FitMessageSpec => ({
+    global: 12,
+    local: 4,
+    fields: [{ num: 0, type: "enum", value: sport }],
+  });
+
+  it("n'applique un message sport qu'à la session qui le suit", () => {
+    const bytes = encodeFit([
+      fileId(),
+      sportMessage(1),
+      session({ sport: 2, distanceCm: 4_000_000 }),
+      session({ sport: null, subSport: null, distanceCm: 1_000_000 }),
+    ]);
+    expect(summaryOf(bytes)).toMatchObject({
+      sport: 2,
+      sportType: "Ride",
+      distanceM: 40000,
+    });
+  });
+
+  it("ne décode plus les sessions après la première session de course", () => {
+    const scan = inspectFit(
+      encodeFit([
+        fileId(),
+        session(),
+        session({ sport: 2 }),
+        session({ distanceCm: 1 }),
+      ]),
+    );
+    expect(scan.result).toEqual({ ok: true, summary: EXPECTED_RUN });
+    expect([scan.decodedMessages, scan.skippedMessages]).toEqual([2, 2]);
+  });
+});
+
+describe("structures hostiles", () => {
+  it("répond invalid pour une définition tronquée au milieu de ses champs", () => {
+    const bytes = wrapFitData([0x40, 0, 0, 18, 0, 3, 2, 4, 0x86, 5, 1]);
+    expect(decodeFitSummary(bytes)).toEqual({ ok: false, error: "invalid" });
+  });
+
+  it("répond invalid quand les champs développeur sont tronqués", () => {
+    const definition = [0x60, 0, 0, 20, 0, 1, 253, 4, 0x86];
+    expect(decodeFitSummary(wrapFitData(definition))).toEqual({
+      ok: false,
+      error: "invalid",
+    });
+    expect(decodeFitSummary(wrapFitData([...definition, 2, 0, 1, 0]))).toEqual({
+      ok: false,
+      error: "invalid",
+    });
+  });
+
+  it("décode en temps borné 1,5 Mio de sessions vides à 255 champs de taille 0", () => {
+    const definition = [0x40, 0, 0, 18, 0, 255];
+    for (let num = 0; num < 255; num++) definition.push(num, 0, 0x86);
+    const emptyMessages = new Array<number>(
+      MIB_1_5 - 16 - definition.length,
+    ).fill(0);
+    const data = definition.concat(emptyMessages);
+    const bytes = wrapFitData(data);
+    const start = performance.now();
+    const scan = inspectFit(bytes);
+    // Budget large pour la CI : il détecte une boucle quadratique, pas une régression fine.
+    expect(performance.now() - start).toBeLessThan(250);
+    expect(scan.result).toEqual({ ok: false, error: "invalid" });
+    expect(scan.decodedMessages).toBe(MIB_1_5 - 16 - 6 - 255 * 3);
+  });
+});
+
+describe("fitCrc", () => {
+  // Implémentation quartet par quartet du SDK Garmin (crc-calculator.js), pour comparaison.
+  const NIBBLES = [
+    0x0000, 0xcc01, 0xd801, 0x1400, 0xf001, 0x3c00, 0x2800, 0xe401, 0xa001,
+    0x6c00, 0x7800, 0xb401, 0x5000, 0x9c01, 0x8801, 0x4400,
+  ];
+  const nibbleCrc = (bytes: Uint8Array) => {
+    let crc = 0;
+    for (const byte of bytes) {
+      crc =
+        ((crc >> 4) & 0x0fff) ^
+        (NIBBLES[crc & 0xf] ?? 0) ^
+        (NIBBLES[byte & 0xf] ?? 0);
+      crc =
+        ((crc >> 4) & 0x0fff) ^
+        (NIBBLES[crc & 0xf] ?? 0) ^
+        (NIBBLES[byte >> 4] ?? 0);
+    }
+    return crc;
+  };
+
+  it("donne la valeur de référence de CRC-16/ARC", () => {
+    const check = Uint8Array.from("123456789", (char) => char.charCodeAt(0));
+    expect(fitCrc(check, 0, check.length)).toBe(0xbb3d);
+  });
+
+  it("donne les mêmes résultats que l'implémentation du SDK", () => {
+    const bytes = Uint8Array.from(
+      { length: 4096 },
+      (_, i) => (i * 7919 + (i >> 3)) & 0xff,
+    );
+    for (const length of [0, 1, 2, 13, 255, 4096]) {
+      const slice = bytes.subarray(0, length);
+      expect(fitCrc(slice, 0, length)).toBe(nibbleCrc(slice));
+    }
   });
 });
 

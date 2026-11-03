@@ -1,6 +1,6 @@
 // Encodeur FIT minimal, réservé aux tests de fit.ts : produit des fichiers synthétiques valides
 // (CRC calculés) pour couvrir endianness, en-têtes 12/14 octets, horodatage compressé et champs
-// développeur. Importé uniquement par fit.test.ts.
+// développeur. Importé uniquement par les tests de fit.ts.
 import { fitCrc } from "./fit";
 
 export type FitBaseType =
