@@ -275,10 +275,12 @@ Le parsing multipart est natif et le décodeur ne lit que les petits messages.
     réécrite à l'identique au prochain envoi.
   - Le FIT brut reste une donnée de l'utilisateur. Il est durable et suit la même suppression que sa
     ligne D1.
-- **D1** : migration additive `migrations/0006_watch_activities.sql`, compatible N-1 (nouvelles tables,
-  rien de modifié) :
+- **D1** : migrations additives, compatibles N-1 (nouvelles tables, rien de modifié). Une migration
+  par issue : A (#66) → `0006_personal_tokens.sql` (`personal_tokens`), C (#68) →
+  `0007_watch_activities.sql` (`watch_activities` et `watch_imports`) :
 
 ```sql
+-- migrations/0007_watch_activities.sql (issue #68).
 -- Séances importées par l'utilisateur depuis sa montre (FIT partagé, ADR 0005).
 -- Tables DURABLES : jamais purgées par le cron ; jamais envoyées à un LLM ; aucune donnée API Strava.
 CREATE TABLE watch_activities (
@@ -310,6 +312,10 @@ CREATE TABLE watch_imports (
 
 CREATE INDEX watch_imports_user_received_idx ON watch_imports (user_id, received_at);
 
+```
+
+```sql
+-- migrations/0006_personal_tokens.sql (issue #66), créée avant 0007.
 -- Jeton personnel (Raccourci iOS) : empreinte SHA-256 seulement, un jeton actif par utilisateur.
 CREATE TABLE personal_tokens (
   user_id INTEGER PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
@@ -371,7 +377,7 @@ Une même sortie peut arriver par trois sources : l'API (`strava_activities`, 7 
 
 ### Découpage en issues (chacune < ~400 lignes)
 - **A. Jeton personnel**
-  - migration `personal_tokens` ;
+  - migration `0006_personal_tokens.sql` ;
   - `POST` et `DELETE /api/personal-token` ;
   - section « Envoi depuis le téléphone » dans l'onglet Import : générer, copier une fois, révoquer,
     date de dernière utilisation ;
@@ -386,7 +392,7 @@ Une même sortie peut arriver par trois sources : l'API (`strava_activities`, 7 
     - fichiers tronqués, CRC faux, sans `session`, multisport (on retient la première `session` de
       course, sinon la première).
 - **C. Endpoint `POST /api/imports/fit`**
-  - migration `watch_activities` et `watch_imports` ;
+  - migration `0007_watch_activities.sql` (`watch_activities` et `watch_imports`) ;
   - liaison R2 `FIT_BUCKET` ;
   - authentification par session ou jeton ;
   - multipart et binaire, limites 413 et 415, idempotence, quota 429 ;

@@ -1023,14 +1023,16 @@ a {
 
 /* Import de l'historique */
 
-.history-import {
+.history-import,
+.import-section {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4) var(--space-4);
 }
 
-.history-help {
+.history-help,
+.import-help {
   max-width: 70ch;
 }
 
@@ -1042,6 +1044,18 @@ a {
 .history-import progress {
   flex: 1;
   min-width: 8rem;
+}
+
+/* Jeton personnel : champ et bouton « Copier » sur une ligne, le champ prend la place restante. */
+.token-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.token-input {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, monospace;
 }
 
 @media (prefers-reduced-motion: reduce) {

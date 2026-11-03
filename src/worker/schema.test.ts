@@ -13,6 +13,7 @@ const DURABLE_TABLES = [
   "plan_sessions",
   "imported_activities",
   "heart_rate_zones",
+  "personal_tokens",
 ];
 const EPHEMERAL_TABLES = ["strava_activities"];
 const ZONES = JSON.stringify(
@@ -58,6 +59,9 @@ async function seedUserWithEverything() {
     ),
     env.DB.prepare(
       `INSERT INTO heart_rate_zones (user_id, resting_hr, max_hr, zones) VALUES (1, 50, 190, '${ZONES}')`,
+    ),
+    env.DB.prepare(
+      `INSERT INTO personal_tokens (user_id, token_sha256) VALUES (1, '${"a".repeat(64)}')`,
     ),
   ]);
 }
@@ -276,6 +280,55 @@ describe("heart_rate_zones", () => {
     ["an object", "{}"],
   ])("reject zones as %s", async (_label, zones) => {
     await expect(insertZones(50, 190, zones)).rejects.toThrow(/CHECK|JSON/);
+  });
+});
+
+describe("personal_tokens", () => {
+  beforeEach(async () => {
+    await run(
+      "INSERT INTO users (id, strava_athlete_id) VALUES (1, 42), (2, 43)",
+    );
+  });
+
+  function insertToken(userId: number, hash: string) {
+    return env.DB.prepare(
+      "INSERT INTO personal_tokens (user_id, token_sha256) VALUES (?, ?)",
+    )
+      .bind(userId, hash)
+      .run();
+  }
+
+  it("allow a single token per user", async () => {
+    await insertToken(1, "a".repeat(64));
+    await expect(insertToken(1, "b".repeat(64))).rejects.toThrow(
+      /UNIQUE|PRIMARY KEY/,
+    );
+  });
+
+  it("reject the same hash for two users", async () => {
+    await insertToken(1, "a".repeat(64));
+    await expect(insertToken(2, "a".repeat(64))).rejects.toThrow(/UNIQUE/);
+  });
+
+  it("reject a token without hash", async () => {
+    await expect(
+      run("INSERT INTO personal_tokens (user_id) VALUES (1)"),
+    ).rejects.toThrow(/NOT NULL/);
+  });
+
+  it("reject a token of an unknown user", async () => {
+    await expect(insertToken(3, "a".repeat(64))).rejects.toThrow(/FOREIGN KEY/);
+  });
+
+  it("fill created_at and leave last_used_at empty", async () => {
+    await insertToken(1, "a".repeat(64));
+    const row = await env.DB.prepare(
+      "SELECT created_at, last_used_at FROM personal_tokens",
+    ).first<{ created_at: string; last_used_at: string | null }>();
+    expect(row?.created_at).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+    );
+    expect(row?.last_used_at).toBeNull();
   });
 });
 

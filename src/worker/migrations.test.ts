@@ -33,6 +33,7 @@ describe("D1 migrations", () => {
         "plan_sessions",
         "imported_activities",
         "heart_rate_zones",
+        "personal_tokens",
       ]),
     );
   });
@@ -104,6 +105,26 @@ describe("D1 migrations", () => {
     expect(migration?.queries).toHaveLength(1);
     expect(migration?.queries[0]).toMatch(
       /^\s*(--[^\n]*\n\s*)*CREATE TABLE heart_rate_zones \(/,
+    );
+  });
+
+  it("create personal_tokens with a mandatory, unique hash", async () => {
+    expect(await columns("personal_tokens")).toEqual([
+      expect.objectContaining({ name: "user_id" }),
+      expect.objectContaining({ name: "token_sha256", notnull: 1 }),
+      expect.objectContaining({ name: "created_at", notnull: 1 }),
+      expect.objectContaining({ name: "last_used_at", notnull: 0 }),
+    ]);
+  });
+
+  // Compatibilité N-1 (ADR 0002) : 0006 ne fait qu'ajouter une table.
+  it("add personal_tokens without altering existing tables", () => {
+    const migration = env.TEST_MIGRATIONS.find((m) =>
+      m.name.startsWith("0006_"),
+    );
+    expect(migration?.queries).toHaveLength(1);
+    expect(migration?.queries[0]).toMatch(
+      /^\s*(--[^\n]*\n\s*)*CREATE TABLE personal_tokens \(/,
     );
   });
 
