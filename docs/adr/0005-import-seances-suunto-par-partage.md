@@ -175,8 +175,19 @@ L'affichage et les calculs **fusionnent** la séance montre avec la même sortie
     - si la session est absente ou invalide, elle renvoie `401` ;
     - les deux modes donnent le même `userId`.
 - **Taille**
-  - Refus `413` si `Content-Length` dépasse **4 MiB**, puis contrôle à nouveau après lecture.
-  - Un FIT de 1 h pèse environ 100 à 300 Ko. 4 MiB couvrent largement un ultra enregistré à 1 Hz.
+  - Refus `413` si `Content-Length` dépasse **1,5 Mio**, puis contrôle à nouveau après lecture.
+  - Un FIT de 1 h pèse environ 100 à 300 Ko : la séance réelle de la fixture (#67) pèse 192 Ko pour
+    1 h 44 à 1 Hz. 1,5 Mio couvrent donc plus de 5 h à 1 Hz.
+  - *Amendement du 2026-11-03 (issue #67)* : la limite passe de 4 Mio à 1,5 Mio, pour le CPU.
+    - Mesures de la QA et de la review (décodeur initial) : CRC sur 4 Mio ≈ 21 ms, pire cas
+      ≈ 57 ms, pour une cible de moins de 10 ms par requête.
+    - Après optimisation (CRC à table de 256 entrées, champs utiles indexés), mesures dans `workerd`
+      en local :
+      - vraie séance de 192 Ko : ≈ 0,5 ms ;
+      - CRC sur 1,5 Mio : ≈ 3 ms ;
+      - pire cas hostile sur 1,5 Mio (1,5 million de messages d'un octet) : ≈ 12 à 22 ms.
+    - Ce pire cas dépasse encore la cible. Il exige toutefois un jeton ou une session valides, et le
+      quota de 30 imports par jour le borne.
 - **Type de contenu**
   - Sont acceptés `multipart/form-data` (champ `file`), `application/octet-stream`,
     `application/vnd.ant.fit` et un type absent. Tout autre type renvoie `415`.
@@ -388,14 +399,16 @@ Une même sortie peut arriver par trois sources : l'API (`strava_activities`, 7 
     `file_id`, `sport` et `session`, conversion du sport ;
   - critères :
     - tests sur des fixtures **synthétiques** générées dans les tests ;
-    - une fixture réelle Suunto **sans GPS** (tapis ou séance en salle) fournie par le propriétaire ;
+    - une fixture réelle Suunto **sans GPS** (tapis ou séance en salle), ou une séance GPS dont toutes
+      les positions et tous les identifiants sont neutralisés (CRC recalculé), fournie par le
+      propriétaire (amendement du 2026-11-03, validé par le propriétaire) ;
     - fichiers tronqués, CRC faux, sans `session`, multisport (on retient la première `session` de
       course, sinon la première).
 - **C. Endpoint `POST /api/imports/fit`**
   - migration `0007_watch_activities.sql` (`watch_activities` et `watch_imports`) ;
   - liaison R2 `FIT_BUCKET` ;
   - authentification par session ou jeton ;
-  - multipart et binaire, limites 413 et 415, idempotence, quota 429 ;
+  - multipart et binaire, limites 413 (1,5 Mio) et 415, idempotence, quota 429 ;
   - réponse JSON avec un `message` en français ;
   - bouton « Importer un fichier FIT » ;
   - `docs/raccourci-ios.md` ;
