@@ -233,3 +233,12 @@ describe("userIdForBearer", () => {
     expect((await status(1)).lastUsedAt).toBeNull();
   });
 });
+
+describe("POST /api/personal-token for a deleted user", () => {
+  it("answers 401 and stores nothing when the session user no longer exists", async () => {
+    await env.DB.prepare("DELETE FROM users WHERE id = 1").run();
+    const response = await call("POST", 1);
+    expect(response.status).toBe(401);
+    expect(await storedRows()).toEqual([]);
+  });
+});

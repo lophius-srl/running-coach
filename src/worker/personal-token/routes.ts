@@ -7,8 +7,10 @@ import { generateToken, tokenSha256 } from "./token";
 import type { GeneratedPersonalToken, PersonalTokenStatus } from "./types";
 
 // Regénérer remplace l'ancien jeton : nouvelle date de création, aucune utilisation.
+// Le SELECT sur users ne renvoie aucune ligne pour une session dont l'utilisateur a été supprimé.
 const UPSERT = `
-  INSERT INTO personal_tokens (user_id, token_sha256) VALUES (?, ?)
+  INSERT INTO personal_tokens (user_id, token_sha256)
+  SELECT id, ? FROM users WHERE id = ?
   ON CONFLICT (user_id) DO UPDATE SET
     token_sha256 = excluded.token_sha256,
     created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
@@ -33,9 +35,9 @@ personalTokenRoutes.get("/", async (c) => {
 personalTokenRoutes.post("/", async (c) => {
   const token = generateToken();
   const row = await c.env.DB.prepare(UPSERT)
-    .bind(c.get("userId"), await tokenSha256(token))
+    .bind(await tokenSha256(token), c.get("userId"))
     .first<{ created_at: string }>();
-  if (!row) throw new Error("personal token not stored");
+  if (!row) return c.json({ error: "unauthorized" }, 401);
   c.header("Cache-Control", "no-store");
   return c.json<GeneratedPersonalToken>(
     { token, createdAt: row.created_at },
