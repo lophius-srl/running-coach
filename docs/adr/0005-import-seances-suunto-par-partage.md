@@ -1,7 +1,8 @@
 # 0005 — Import des séances Suunto (FIT) par partage depuis le téléphone
 
 - **Date** : 2026-11-03
-- **Statut** : proposé
+- **Statut** : accepté (2026-11-03, par le propriétaire). Priorité à l'iPhone : le parcours Android
+  (PWA et Web Share Target, issue D) est reporté.
 
 ## Contexte
 Le propriétaire court avec une montre Suunto. Il veut garder **toutes** ses séances sans limite de durée,
