@@ -106,6 +106,31 @@ describe("pairWatchRuns : ambiguïtés", () => {
   });
 });
 
+describe("pairWatchRuns : dates illisibles", () => {
+  it("ne rapproche jamais une séance dont la date est illisible", () => {
+    const bad = "pas une date";
+    expect(matched(strava({ startDate: bad }), watch())).toBe(false);
+    expect(matched(strava(), watch({ startDate: bad }))).toBe(false);
+    expect(matched(strava({ startDate: bad }), watch({ startDate: bad }))).toBe(
+      false,
+    );
+  });
+
+  it("rapproche les autres séances malgré une date illisible dans la liste", () => {
+    const pairs = pairWatchRuns(
+      [strava({ id: 1, startDate: "pas une date" }), strava({ id: 2 })],
+      [watch({ id: 3, startDate: "?" }), watch({ id: 4 })],
+    );
+    expect(
+      pairs.map((p) => [p.strava?.id ?? null, p.watch?.id ?? null]),
+    ).toEqual([
+      [2, 4],
+      [1, null],
+      [null, 3],
+    ]);
+  });
+});
+
 describe("mergeWatchRuns", () => {
   it("prend les mesures de la montre, le nom, l'id et le type de Strava", () => {
     const s = strava({ sportType: "TrailRun" });

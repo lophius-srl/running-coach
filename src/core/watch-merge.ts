@@ -37,13 +37,20 @@ export const watchRunId = (watchId: number) => -watchId;
 
 type Dated<T> = { run: T; startMs: number };
 
+// Date illisible rangée en dernier (+∞) : le tri reste cohérent et la fenêtre glissante aussi.
+function startMsOf(run: RunSample): number {
+  const ms = Date.parse(run.startDate);
+  return Number.isNaN(ms) ? Infinity : ms;
+}
+
 function byStart<T extends RunSample>(runs: readonly T[]): Dated<T>[] {
   return runs
-    .map((run) => ({ run, startMs: Date.parse(run.startDate) }))
+    .map((run) => ({ run, startMs: startMsOf(run) }))
     .sort((a, b) => a.startMs - b.startMs || a.run.id - b.run.id);
 }
 
-// Écart de distance en entiers (× 100) : bornes exactes, sans arrondi flottant.
+// Écart de distance comparé sans division (× 100) : calcul flottant, exact aux bornes en pratique
+// (distances au mètre ou au centimètre).
 function distanceMatches(watchM: number, stravaM: number): boolean {
   const gap = Math.abs(watchM - stravaM);
   return (
@@ -71,6 +78,8 @@ function candidates(
     for (let si = first; si < strava.length; si += 1) {
       const gapMs = strava[si].startMs - w.startMs;
       if (gapMs > MATCH_MAX_START_GAP_MS) break;
+      // Deux dates illisibles (∞ − ∞ = NaN) : pas de rapprochement, chaque séance reste seule.
+      if (!(Math.abs(gapMs) <= MATCH_MAX_START_GAP_MS)) continue;
       if (distanceMatches(w.run.distanceM, strava[si].run.distanceM)) {
         found.push({ gapMs: Math.abs(gapMs), w: wi, s: si });
       }
@@ -125,7 +134,9 @@ function withWatchMeasures<S extends RunSample>(
   };
 }
 
-// Courses Strava (déjà fusionnées par mergeRuns) et séances montre, sans doublon.
+// Courses Strava (déjà fusionnées par mergeRuns) et séances montre, sans doublon. Ordre de sortie
+// NON chronologique : courses Strava par départ, puis séances montre seules par départ. Trier au
+// besoin.
 export function mergeWatchRuns<S extends RunSample>(
   strava: readonly S[],
   watch: readonly WatchRunSample[],
