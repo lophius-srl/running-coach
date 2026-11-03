@@ -14,6 +14,7 @@ import { isAcceptedContentType, maxBodyBytes, readFitBody } from "./body";
 import {
   DAILY_IMPORT_QUOTA,
   FIXED_MESSAGES,
+  SESSION_EXPIRED_MESSAGE,
   SINGLE_FILE_MESSAGE,
   duplicateMessage,
   importedMessage,
@@ -204,6 +205,17 @@ async function importFit(c: ImportContext, userId: number) {
   });
 }
 
+// Avec un en-tête Authorization, c'est le Raccourci (jeton) ; sinon, la session de l'onglet Import.
+function unauthorized(c: ImportContext) {
+  if (c.req.header("Authorization") !== undefined) {
+    return fixed(c, "unauthorized", 401);
+  }
+  return reply(c, 401, {
+    status: "unauthorized",
+    message: SESSION_EXPIRED_MESSAGE,
+  });
+}
+
 function isForeignKeyError(err: unknown): boolean {
   return err instanceof Error && /FOREIGN KEY/i.test(err.message);
 }
@@ -213,7 +225,7 @@ export const fitImportRoutes = new Hono<AppEnv>();
 // Chemin exempté du middleware de session (index.ts) : la route s'authentifie elle-même.
 fitImportRoutes.post("/fit", async (c) => {
   const userId = await authenticate(c);
-  if (userId === null) return fixed(c, "unauthorized", 401);
+  if (userId === null) return unauthorized(c);
   const contentType = c.req.header("Content-Type");
   if (!isAcceptedContentType(contentType)) {
     return fixed(c, "unsupported_type", 415);
@@ -225,7 +237,7 @@ fitImportRoutes.post("/fit", async (c) => {
     return await importFit(c, userId);
   } catch (err) {
     // Session encore valide d'un utilisateur supprimé : la clé étrangère refuse l'écriture.
-    if (isForeignKeyError(err)) return fixed(c, "unauthorized", 401);
+    if (isForeignKeyError(err)) return unauthorized(c);
     // Exception réduite à un statut : rien du fichier ni de l'erreur ne part dans les logs.
     return fixed(c, "error", 500);
   }

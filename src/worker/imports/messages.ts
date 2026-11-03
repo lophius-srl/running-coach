@@ -52,13 +52,17 @@ export const FIXED_MESSAGES: Record<FixedStatus, string> = {
     "Fichier FIT illisible (incomplet ou corrompu). Exporte à nouveau la séance depuis l'app Suunto.",
   quota: `Limite de ${DAILY_IMPORT_QUOTA} envois en 24 h atteinte. Réessaie plus tard.`,
   unauthorized:
-    "Envoi refusé : jeton absent ou invalide. Regénère ton jeton dans l'onglet Import de Running Coach et colle-le dans le Raccourci.",
+    "Envoi refusé : jeton absent ou invalide. Régénère ton jeton dans l'onglet Import de Running Coach et colle-le dans le Raccourci.",
   too_large: "Fichier trop gros : 1,5 Mo au maximum pour une séance.",
   unsupported_type:
     "Format d'envoi refusé : envoie le fichier FIT brut (corps « Fichier ») ou en formulaire (champ « file »).",
   error:
     "Erreur du serveur : la séance n'a pas été importée. Réessaie dans un moment.",
 };
+
+// 401 sans en-tête Authorization : envoi depuis l'onglet Import, la session a expiré.
+export const SESSION_EXPIRED_MESSAGE =
+  "Session expirée : reconnecte-toi à Running Coach, puis réessaie.";
 
 export const SINGLE_FILE_MESSAGE =
   "Envoie un seul fichier FIT par envoi, dans le champ « file ».";

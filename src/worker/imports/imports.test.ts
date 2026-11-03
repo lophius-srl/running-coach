@@ -347,7 +347,6 @@ describe("POST /api/imports/fit — quota", () => {
 
 describe("POST /api/imports/fit — authentication", () => {
   it.each([
-    ["no credentials", {}],
     ["an unknown token", { Authorization: `Bearer ${generateToken()}` }],
     ["a token in another scheme", { Authorization: "Basic abc" }],
   ])("answers 401 with %s, and logs nothing", async (_label, headers) => {
@@ -359,6 +358,20 @@ describe("POST /api/imports/fit — authentication", () => {
     expect(http).toBe(401);
     expect(body.status).toBe("unauthorized");
     expect(body.message).toMatch(/jeton absent ou invalide/);
+    expect(await journal()).toEqual([]);
+  });
+
+  it("tells the Import tab its session has expired when no token is sent", async () => {
+    const { http, body } = await sendJson(SUUNTO_RUN, {
+      "Content-Type": "application/octet-stream",
+    });
+
+    expect(http).toBe(401);
+    expect(body).toEqual({
+      status: "unauthorized",
+      message:
+        "Session expirée : reconnecte-toi à Running Coach, puis réessaie.",
+    });
     expect(await journal()).toEqual([]);
   });
 
@@ -375,9 +388,10 @@ describe("POST /api/imports/fit — authentication", () => {
     const cookie = await sessionCookie(2);
     await env.DB.prepare("DELETE FROM users WHERE id = 2").run();
 
-    const { http } = await sendJson(SUUNTO_RUN, { Cookie: cookie });
+    const { http, body } = await sendJson(SUUNTO_RUN, { Cookie: cookie });
 
     expect(http).toBe(401);
+    expect(body.message).toMatch(/^Session expirée/);
     expect(await activities()).toEqual([]);
   });
 
