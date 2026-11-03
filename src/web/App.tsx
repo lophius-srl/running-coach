@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AppNav } from "./AppNav";
 import { GoalView } from "./GoalView";
 import { HistoryImport } from "./HistoryImport";
+import { PhoneUpload } from "./PhoneUpload";
 import { Layout } from "./Layout";
 import { ProgressionView } from "./ProgressionView";
 import { APP_NAME, documentTitle, routeFor } from "./routes";
@@ -83,7 +84,12 @@ function ConnectedApp({ athleteId, onLogout }: ConnectedProps) {
         />
       )}
       {view === "progression" && <ProgressionView />}
-      {view === "history" && <HistoryImport />}
+      {view === "history" && (
+        <div className="view-stack">
+          <HistoryImport />
+          <PhoneUpload />
+        </div>
+      )}
     </Layout>
   );
 }

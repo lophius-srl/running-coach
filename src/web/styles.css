@@ -1044,6 +1044,18 @@ a {
   min-width: 8rem;
 }
 
+/* Jeton personnel : champ et bouton « Copier » sur une ligne, le champ prend la place restante. */
+.token-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.token-input {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, monospace;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
