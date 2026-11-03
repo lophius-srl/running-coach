@@ -266,6 +266,11 @@ function withWatch(run: ParsedRun, watch: WatchRow): ParsedRun {
     elapsedTimeS: watch.elapsedTimeS,
     pauseS: pauseOf(watch.elapsedTimeS, watch.movingTimeS),
     paceSPerKm: paceSecondsPerKm(watch.distanceM, watch.movingTimeS),
+    // Pic de vitesse de Strava, revérifié face à l'allure moyenne de la montre (même règle).
+    maxPaceSPerKm:
+      run.maxPaceSPerKm === null
+        ? null
+        : maxPace(1000 / run.maxPaceSPerKm, watch.distanceM, watch.movingTimeS),
     averageHeartrate: watch.averageHeartrate ?? run.averageHeartrate,
     maxHeartrate: watch.maxHeartrate ?? run.maxHeartrate,
     elevationGainM,

@@ -120,6 +120,25 @@ describe("GET /api/activities : séances montre", () => {
     });
   });
 
+  it("écarte l'allure max Strava plus lente que l'allure moyenne de la montre", async () => {
+    // Strava : 10 050 m en 3 010 s (3,339 m/s) ; montre : 10 000 m en 2 990 s (3,344 m/s).
+    await syncRun(1, 501, {
+      start_date: "2026-11-03T07:00:00Z",
+      max_speed: 3.34,
+    });
+    await syncRun(1, 502, {
+      start_date: "2026-11-02T07:00:00Z",
+      max_speed: 5,
+    });
+    await watchRun(1, "2026-11-03T07:01:00Z");
+    await watchRun(1, "2026-11-02T07:01:00Z");
+    const { runs } = await get<RecentRuns>("/api/activities");
+    expect(runs.map((run) => [run.id, run.maxPaceSPerKm])).toEqual([
+      [501, null],
+      [502, 200],
+    ]);
+  });
+
   it("ajoute une carte pour la séance montre sans Strava, sans le vélo ni l'autre utilisateur", async () => {
     const { alone } = await seed();
     const { runs, total } = await get<RecentRuns>("/api/activities");
