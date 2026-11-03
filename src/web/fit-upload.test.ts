@@ -13,16 +13,19 @@ afterEach(() => {
 
 describe("fitUploadOutcome", () => {
   it.each([
-    ["imported", true],
-    ["duplicate", true],
-    ["not_fit", false],
-    ["invalid", false],
-    ["quota", false],
-    ["unauthorized", false],
-    ["too_large", false],
-  ])("reports %s with the server message", (status, ok) => {
+    ["imported", true, true],
+    ["duplicate", true, true],
+    ["not_fit", false, true],
+    ["invalid", false, true],
+    ["quota", false, true],
+    ["unauthorized", false, false],
+    ["too_large", false, false],
+    ["unsupported_type", false, false],
+    ["error", false, false],
+  ])("reports %s with the server message", (status, ok, logged) => {
     expect(fitUploadOutcome({ status, message: "Message." })).toEqual({
       ok,
+      logged,
       message: "Message.",
     });
   });
@@ -32,6 +35,7 @@ describe("fitUploadOutcome", () => {
     (body) => {
       expect(fitUploadOutcome(body)).toEqual({
         ok: false,
+        logged: false,
         message: "Envoi impossible. Vérifie ta connexion, puis réessaie.",
       });
     },
@@ -53,7 +57,11 @@ describe("uploadFit", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const file = new File([new Uint8Array(MIB_1_5 + 1)], "seance.fit");
 
-    expect(await uploadFit(file)).toEqual({ ok: false, message: TOO_LARGE });
+    expect(await uploadFit(file)).toEqual({
+      ok: false,
+      logged: false,
+      message: TOO_LARGE,
+    });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -67,6 +75,7 @@ describe("uploadFit", () => {
 
     expect(await uploadFit(file)).toEqual({
       ok: true,
+      logged: true,
       message: "Séance importée",
     });
     const [url, init] = fetchSpy.mock.calls[0];
@@ -78,7 +87,7 @@ describe("uploadFit", () => {
   it("reports a network failure", async () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("offline"));
     const outcome = await uploadFit(new File([], "seance.fit"));
-    expect(outcome.ok).toBe(false);
+    expect(outcome).toMatchObject({ ok: false, logged: false });
   });
 });
 

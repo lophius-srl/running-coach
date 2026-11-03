@@ -24,7 +24,8 @@ export function FitUpload() {
     setState({ status: "sending" });
     const outcome = await uploadFit(file);
     setState({ status: "done", ...outcome });
-    if (outcome.ok) setVersion((current) => current + 1);
+    // Tout envoi journalisé (succès, doublon ou refus) apparaît dans « Derniers imports ».
+    if (outcome.logged) setVersion((current) => current + 1);
   }
 
   return (
