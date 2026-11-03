@@ -368,7 +368,10 @@ Une même sortie peut arriver par trois sources : l'API (`strava_activities`, 7 
   - les **mesures** (départ, distance, temps, D+, FC) viennent de la **montre**, la source d'origine,
     durable et plus précise ;
   - le **nom** et l'**id** viennent de Strava quand la sortie est rapprochée (le FIT n'a pas de titre) ;
-  - le nom Strava vient du CSV, durable, ou de l'API, qui reste soumise aux 7 jours.
+  - le nom Strava vient du CSV, durable, ou de l'API, qui reste soumise aux 7 jours ;
+  - le **type** (`sport_type`) d'une sortie rapprochée vient aussi de Strava, où l'utilisateur peut le
+    corriger (issue #69). Une sortie Strava typée `Walk` ou `Ride` retire donc la séance montre
+    rapprochée des calculs de course (`RUN_TYPES`). Une séance montre seule garde le type de la montre.
 - **Séance montre sans équivalent Strava** : elle reçoit l'id `-watch_activities.id`. Les ids Strava sont
   positifs, donc il n'y a pas de collision avec `RunSample.id`. Cette convention est documentée et testée.
 - **Temps** : `moving_time_s` (montre) vient du temps chronométré (pauses exclues). Le `moving_time` de

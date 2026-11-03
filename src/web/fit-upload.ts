@@ -2,19 +2,38 @@
 // lit le fichier et renvoie un `message` en français, affiché tel quel.
 
 import { FIXED_MESSAGES, MAX_FIT_BYTES } from "../worker/imports/messages";
-import type { FitImportResponse } from "../worker/imports/types";
+import type {
+  FitImportResponse,
+  FitImportStatus,
+  LoggedImportStatus,
+} from "../worker/imports/types";
 
-export type FitUploadOutcome = { ok: boolean; message: string };
+// `logged` : le serveur a journalisé l'envoi (watch_imports), la liste « Derniers imports » change.
+export type FitUploadOutcome = {
+  ok: boolean;
+  logged: boolean;
+  message: string;
+};
+
+const LOGGED_STATUSES: ReadonlySet<FitImportStatus> =
+  new Set<LoggedImportStatus>([
+    "imported",
+    "duplicate",
+    "not_fit",
+    "invalid",
+    "quota",
+  ]);
 
 const FALLBACK = "Envoi impossible. Vérifie ta connexion, puis réessaie.";
 
 export function fitUploadOutcome(body: unknown): FitUploadOutcome {
   const response = body as Partial<FitImportResponse> | null;
   if (typeof response?.message !== "string" || !response.status) {
-    return { ok: false, message: FALLBACK };
+    return { ok: false, logged: false, message: FALLBACK };
   }
-  const ok = response.status === "imported" || response.status === "duplicate";
-  return { ok, message: response.message };
+  const { status, message } = response;
+  const ok = status === "imported" || status === "duplicate";
+  return { ok, logged: LOGGED_STATUSES.has(status), message };
 }
 
 // Refus avant envoi d'un fichier que le serveur rejetterait en 413 (même message).
@@ -25,7 +44,7 @@ export function fitFileProblem(file: { size: number }): string | null {
 // Multipart avec la session (cookie envoyé d'office sur la même origine).
 export async function uploadFit(file: File): Promise<FitUploadOutcome> {
   const problem = fitFileProblem(file);
-  if (problem !== null) return { ok: false, message: problem };
+  if (problem !== null) return { ok: false, logged: false, message: problem };
   const form = new FormData();
   form.append("file", file);
   try {
@@ -35,6 +54,6 @@ export async function uploadFit(file: File): Promise<FitUploadOutcome> {
     });
     return fitUploadOutcome(await response.json());
   } catch {
-    return { ok: false, message: FALLBACK };
+    return { ok: false, logged: false, message: FALLBACK };
   }
 }

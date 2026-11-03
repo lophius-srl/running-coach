@@ -202,13 +202,19 @@ describe("token scope", () => {
     expect(await journal()).toEqual([]);
   });
 
-  it.each(["GET", "PUT", "PATCH", "DELETE"])(
-    "exposes nothing on %s /api/imports/fit, with or without credentials",
-    async (method) => {
+  // GET (« Derniers imports », #69) existe mais exige la session : 401 sans elle, jeton compris.
+  it.each([
+    ["GET", 401],
+    ["PUT", 404],
+    ["PATCH", 404],
+    ["DELETE", 404],
+  ])(
+    "exposes nothing on %s /api/imports/fit, with or without the token",
+    async (method, status) => {
       await send(syntheticFit());
       for (const headers of [{}, bearer()]) {
         const response = await app.request(URL, { method, headers }, testEnv);
-        expect(response.status).toBe(404);
+        expect(response.status).toBe(status);
         const text = await response.text();
         expect(text).not.toMatch(/watch|startDate|distance|imported/i);
       }
@@ -574,7 +580,8 @@ describe("existing computations", () => {
     return bodies;
   }
 
-  it("ignore watch sessions, runs and rides alike", async () => {
+  // Depuis #69, les courses de la montre sont fusionnées (src/core/watch-merge) ; le reste est ignoré.
+  it("ignore non-run watch sessions but merges watch runs", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-04T12:00:00Z"));
     await env.DB.prepare(
@@ -584,7 +591,6 @@ describe("existing computations", () => {
     const cookie = await sessionCookie(1);
     const before = await readAll(cookie);
 
-    await send(syntheticFit({ sport: 1, distanceCm: 1_234_500 }));
     await send(
       syntheticFit({
         sport: 2,
@@ -592,8 +598,19 @@ describe("existing computations", () => {
         start: "2026-11-03T15:00:00Z",
       }),
     );
-
-    expect(await activities()).toHaveLength(2);
     expect(await readAll(cookie)).toEqual(before);
+
+    await send(syntheticFit({ sport: 1, distanceCm: 1_234_500 }));
+    expect(await activities()).toHaveLength(2);
+    const after = await readAll(cookie);
+    const week = JSON.parse(after["/api/activities"]) as {
+      runs: { id: number; name: string; distanceM: number }[];
+    };
+    expect(week.runs).toHaveLength(1);
+    expect(week.runs[0]).toMatchObject({
+      name: "Séance Suunto",
+      distanceM: 12_345,
+    });
+    expect(week.runs[0].id).toBeLessThan(0);
   });
 });

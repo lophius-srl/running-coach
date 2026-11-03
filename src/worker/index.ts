@@ -74,20 +74,26 @@ app.post("/api/sync", async (c) => {
   }
 });
 
-// Tableau de bord : courses des 7 derniers jours de l'utilisateur, sans le payload brut.
+// Tableau de bord : courses des 7 derniers jours de l'utilisateur (Strava et montre fusionnés),
+// sans le payload brut.
 // Runs récents et leurs indicateurs (niveau actuel, zones cardiaques), calculés à la volée.
 app.get("/api/activities", async (c) => {
   const userId = c.get("userId");
   const nowMs = Date.now();
-  const [{ runs, payloads }, heartRate] = await Promise.all([
+  const [{ runs, payloads, watch }, heartRate] = await Promise.all([
     loadRunsAndPayloads(c.env.DB, userId, nowMs),
     loadHeartRate(c.env.DB, userId),
   ]);
   return c.json(
-    summarizeRecentRuns(payloads, nowMs, {
-      vdot: estimateFitness(runs, nowMs)?.vdot ?? null,
-      heartRateZones: heartRate?.zones ?? null,
-    }),
+    summarizeRecentRuns(
+      payloads,
+      nowMs,
+      {
+        vdot: estimateFitness(runs, nowMs)?.vdot ?? null,
+        heartRateZones: heartRate?.zones ?? null,
+      },
+      watch,
+    ),
   );
 });
 

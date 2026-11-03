@@ -1,5 +1,6 @@
 import { useRef, useState, type ChangeEvent } from "react";
 import { uploadFit, type FitUploadOutcome } from "./fit-upload";
+import { RecentImports } from "./RecentImports";
 import { Alert } from "./ui";
 
 // Repli du Raccourci iOS (ADR 0005) : envoi d'un fichier FIT depuis n'importe quel appareil.
@@ -14,13 +15,17 @@ type State =
 export function FitUpload() {
   const input = useRef<HTMLInputElement>(null);
   const [state, setState] = useState<State>({ status: "idle" });
+  const [version, setVersion] = useState(0);
 
   async function onFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
     setState({ status: "sending" });
-    setState({ status: "done", ...(await uploadFit(file)) });
+    const outcome = await uploadFit(file);
+    setState({ status: "done", ...outcome });
+    // Tout envoi journalisé (succès, doublon ou refus) apparaît dans « Derniers imports ».
+    if (outcome.logged) setVersion((current) => current + 1);
   }
 
   return (
@@ -56,6 +61,7 @@ export function FitUpload() {
       <p className="muted" role="status">
         {state.status === "done" && state.ok ? state.message : ""}
       </p>
+      <RecentImports version={version} />
     </section>
   );
 }

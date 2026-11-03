@@ -18,7 +18,7 @@ export function formatSessionDay(startDate: string): string {
 }
 
 // 13 106 m → « 13,1 km » (au dixième).
-function formatKm(distanceM: number): string {
+export function formatKm(distanceM: number): string {
   return `${(Math.round(distanceM / 100) / 10).toFixed(1).replace(".", ",")} km`;
 }
 

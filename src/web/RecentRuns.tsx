@@ -188,7 +188,7 @@ function DetailList({
 }
 
 // Une sortie : en-tête (date, nom, badges), cinq chiffres clés, repères, puis un volet replié
-// avec le reste des détails, et le lien Strava toujours visible.
+// avec le reste des détails, et le lien Strava (absent pour une séance montre sans Strava, id < 0).
 function RunCard({ run }: { run: Run }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
@@ -240,15 +240,17 @@ function RunCard({ run }: { run: Run }) {
               <DetailList className="run-details" details={details} />
             </div>
           )}
-          <a
-            className="strava-link"
-            href={`https://www.strava.com/activities/${run.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            View on Strava
-            <span className="visually-hidden">{` : ${name} (nouvel onglet)`}</span>
-          </a>
+          {run.id > 0 && (
+            <a
+              className="strava-link"
+              href={`https://www.strava.com/activities/${run.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              View on Strava
+              <span className="visually-hidden">{` : ${name} (nouvel onglet)`}</span>
+            </a>
+          )}
         </div>
       </article>
     </li>
