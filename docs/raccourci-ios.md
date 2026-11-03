@@ -4,9 +4,10 @@ Ce Raccourci envoie une séance de ta montre Suunto à Running Coach depuis la f
 l'iPhone, en 2 ou 3 gestes (ADR 0005). Il fait un `POST` du fichier FIT vers
 `/api/imports/fit`, avec ton **jeton personnel**, puis affiche la réponse dans une notification.
 
-> Intitulés des actions : ceux de l'app Raccourcis en français (iOS 17 et 18), indiqués de mémoire
-> et à confirmer sur ton iPhone. Ils n'ont pas pu être revérifiés en ligne à la rédaction. Si un
-> intitulé diffère, cherche l'action par son nom anglais, indiqué entre parenthèses.
+> Intitulés : ceux de la documentation officielle d'Apple en français pour l'action « Obtenir le
+> contenu de l'URL » (voir [Sources](#sources)). Les autres intitulés et la disposition exacte
+> peuvent varier selon la version d'iOS et la région. Si un intitulé diffère, cherche l'action par
+> son nom anglais, indiqué entre parenthèses.
 
 ## Avant de commencer
 1. Ouvre Running Coach, onglet **Import**, section **Envoi depuis l'iPhone**.
@@ -25,13 +26,15 @@ Ne partage jamais ce Raccourci par un lien iCloud : il contient ton jeton.
    - « Si aucune entrée » : choisis **Arrêter et répondre** (ou laisse **Continuer**).
 2. **Action « Obtenir le contenu de l'URL »** (*Get Contents of URL*). Ajoute-la, puis :
    - **URL** : `https://running-coach.dawn-frog-3fd3.workers.dev/api/imports/fit`
-   - Déplie les options (flèche **>** ou **Afficher plus**) :
+   - Touche **En afficher plus** (ou **Afficher plus**, selon la version et la région) :
      - **Méthode** : `POST`
      - **En-têtes** : touche **Ajouter un nouvel en-tête**.
        Clé : `Authorization`. Valeur : `Bearer`, **une espace**, puis ton jeton collé
        (ex. `Bearer rc_AbC…`). N'ajoute pas de guillemets.
-     - **Corps de la requête** : **Fichier** (*File*). Dans le champ **Fichier**, choisis la
-       variable **Entrée du raccourci** (*Shortcut Input*).
+     - **Demander le corps** (*Request Body*, intitulé de la doc Apple en français ; parfois
+       affiché « Corps de la requête ») : parmi **JSON**, **Formulaire** et **Fichier**, choisis
+       **Fichier** (*File*). Dans le champ **Fichier**, choisis la variable **Entrée du
+       raccourci** (*Shortcut Input*).
 3. **Action « Obtenir la valeur du dictionnaire »** (*Get Dictionary Value*) :
    **Obtenir** `Valeur` pour la clé `message` dans **Contenu de l'URL**.
 4. **Action « Afficher la notification »** (*Show Notification*) : touche le texte et choisis la
@@ -42,7 +45,7 @@ La réponse du serveur est toujours un JSON `{ "status", "message" }`, y compris
 la notification affiche donc aussi les refus (« Fichier trop gros… »).
 
 Variante si l'envoi est refusé avec « Format d'envoi refusé » (415) : à l'étape 2, choisis
-**Corps de la requête** : **Formulaire** (*Form*), ajoute un champ de type **Fichier**, clé `file`,
+**Demander le corps** : **Formulaire** (*Form*), ajoute un champ de type **Fichier**, clé `file`,
 valeur **Entrée du raccourci**. Le serveur accepte les deux formats.
 
 ## Envoyer une séance
@@ -60,7 +63,7 @@ conservées, mais ignorées par les calculs.
 ## Dépannage
 | Message ou code | Cause | Solution |
 | --- | --- | --- |
-| « jeton absent ou invalide » (401) | Jeton mal collé, révoqué ou **regénéré** depuis (l'ancien ne marche plus). | Regénère un jeton dans l'onglet Import et remplace la valeur de l'en-tête `Authorization` (`Bearer` + espace + jeton). |
+| « jeton absent ou invalide » (401) | Jeton mal collé, révoqué ou **régénéré** depuis (l'ancien ne marche plus). | Régénère un jeton dans l'onglet Import et remplace la valeur de l'en-tête `Authorization` (`Bearer` + espace + jeton). |
 | « Fichier trop gros » (413) | Fichier de plus de 1,5 Mo (séance de plus de 5 h environ). | Pas de contournement pour l'instant : signale-le. |
 | « Format d'envoi refusé » (415) | Le Raccourci envoie un type de contenu inattendu. | Passe le corps en **Formulaire**, champ `file` (voir la variante). |
 | « n'est pas un fichier FIT » (400) | Fichier **GPX** ou autre format : seul le FIT est pris en charge. | Dans l'app Suunto, choisis l'export **FIT**. |
@@ -75,3 +78,11 @@ Le jeton n'ouvre que l'envoi de séances : il ne donne accès à aucune autre do
 Le fichier FIT vient de ta montre, pas de l'API Strava (ADR 0005). Il est conservé durablement
 (fichier brut dans R2, résumé dans la base), n'est jamais purgé par la tâche quotidienne et n'est
 jamais envoyé à un LLM.
+
+## Sources
+- Apple, « Demander des URL dans Raccourcis sur Mac » (action « Obtenir le contenu de l'URL »,
+  « En afficher plus », méthode, en-têtes, « Demander le corps » : JSON, Formulaire ou Fichier) :
+  https://support.apple.com/fr-fr/guide/shortcuts-mac/apd58d46713f/mac. L'action est la même sur
+  iPhone.
+- Apple, entrée d'un raccourci depuis la feuille de partage :
+  https://support.apple.com/guide/shortcuts/apd7644168e1/ios
