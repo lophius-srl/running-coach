@@ -242,3 +242,144 @@ describe("POST /api/personal-token for a deleted user", () => {
     expect(await storedRows()).toEqual([]);
   });
 });
+
+describe("token format (QA #66)", () => {
+  function decodeBase64Url(body: string): Uint8Array {
+    const base64 = body.replace(/-/g, "+").replace(/_/g, "/") + "=";
+    return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+  }
+
+  it("encode exactly 32 bytes after rc_, without padding", () => {
+    for (let i = 0; i < 200; i++) {
+      const token = generateToken();
+      expect(token).not.toContain("=");
+      expect(decodeBase64Url(token.slice(3))).toHaveLength(32);
+    }
+  });
+
+  it("never repeat a token over many generations", () => {
+    const tokens = new Set(Array.from({ length: 1000 }, generateToken));
+    expect(tokens.size).toBe(1000);
+  });
+
+  it("use the whole base64url alphabet, - and _ included", () => {
+    const chars = new Set(
+      Array.from({ length: 500 }, () => generateToken().slice(3)).join(""),
+    );
+    expect(chars.has("-")).toBe(true);
+    expect(chars.has("_")).toBe(true);
+    expect(chars.has("+")).toBe(false);
+    expect(chars.has("/")).toBe(false);
+  });
+});
+
+describe("/api/personal-token edge cases (QA #66)", () => {
+  it("send the new token with no-store and a JSON body", async () => {
+    const response = await call("POST", 1);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Content-Type")).toMatch(/application\/json/);
+  });
+
+  it("refuse the first token after two successive generations", async () => {
+    const first = await generate(1);
+    const second = await generate(1);
+    expect(await userIdForBearer(env.DB, `Bearer ${first.token}`)).toBeNull();
+    expect(await userIdForBearer(env.DB, `Bearer ${second.token}`)).toBe(1);
+  });
+
+  it("reset last_used_at and created_at when regenerating", async () => {
+    const first = await generate(1);
+    await env.DB.prepare(
+      "UPDATE personal_tokens SET created_at = '2020-01-01T00:00:00.000Z', last_used_at = '2020-01-02T00:00:00.000Z'",
+    ).run();
+    const second = await generate(1);
+    expect(second.createdAt).not.toBe("2020-01-01T00:00:00.000Z");
+    expect(await status(1)).toEqual({
+      exists: true,
+      createdAt: second.createdAt,
+      lastUsedAt: null,
+    });
+    expect(first.token).not.toBe(second.token);
+  });
+
+  it("do not record a use when the status is read", async () => {
+    await generate(1);
+    await call("GET", 1);
+    await call("GET", 1);
+    expect((await status(1)).lastUsedAt).toBeNull();
+  });
+
+  it("answer 204 to DELETE when there is no token", async () => {
+    expect((await call("DELETE", 1)).status).toBe(204);
+    expect((await status(1)).exists).toBe(false);
+  });
+
+  it("do not let a user read another user's token dates", async () => {
+    await generate(2);
+    expect(await status(1)).toEqual({
+      exists: false,
+      createdAt: null,
+      lastUsedAt: null,
+    });
+  });
+
+  it("do not let a user's POST replace another user's token", async () => {
+    const other = await generate(2);
+    await generate(1);
+    expect(await userIdForBearer(env.DB, `Bearer ${other.token}`)).toBe(2);
+  });
+
+  it("refuse a bearer token on the token routes themselves", async () => {
+    const { token } = await generate(1);
+    for (const method of ["GET", "POST", "DELETE"]) {
+      const response = await app.request(
+        URL,
+        { method, headers: { Authorization: `Bearer ${token}` } },
+        testEnv,
+      );
+      expect(response.status).toBe(401);
+    }
+    expect(await userIdForBearer(env.DB, `Bearer ${token}`)).toBe(1);
+  });
+
+  it("delete the token with its user", async () => {
+    const { token } = await generate(1);
+    await env.DB.prepare("DELETE FROM users WHERE id = 1").run();
+    expect(await storedRows()).toEqual([]);
+    expect(await userIdForBearer(env.DB, `Bearer ${token}`)).toBeNull();
+  });
+});
+
+describe("userIdForBearer header parsing (QA #66)", () => {
+  it("accept several spaces between the scheme and the token", async () => {
+    const { token } = await generate(1);
+    expect(await userIdForBearer(env.DB, `Bearer    ${token}`)).toBe(1);
+  });
+
+  it("accept an upper-case scheme", async () => {
+    const { token } = await generate(1);
+    expect(await userIdForBearer(env.DB, `BEARER ${token}`)).toBe(1);
+  });
+
+  it.each([
+    ["a suffix glued to the token", (t: string) => `Bearer ${t}x`],
+    ["a tab instead of a space", (t: string) => `Bearer\t${t}`],
+    ["no space after the scheme", (t: string) => `Bearer${t}`],
+    ["the scheme repeated", (t: string) => `Bearer Bearer ${t}`],
+    ["two tokens", (t: string) => `Bearer ${t},${t}`],
+    ["a very long header", (t: string) => `Bearer ${t}${"A".repeat(100_000)}`],
+    ["the token alone", (t: string) => t],
+  ])("refuse %s", async (_label, build) => {
+    const { token } = await generate(1);
+    expect(await userIdForBearer(env.DB, build(token))).toBeNull();
+    expect((await status(1)).lastUsedAt).toBeNull();
+  });
+
+  it("refuse a token whose case differs", async () => {
+    const { token } = await generate(1);
+    const swapped = `rc_${[...token.slice(3)]
+      .map((c) => (c === c.toLowerCase() ? c.toUpperCase() : c.toLowerCase()))
+      .join("")}`;
+    expect(await userIdForBearer(env.DB, `Bearer ${swapped}`)).toBeNull();
+  });
+});
