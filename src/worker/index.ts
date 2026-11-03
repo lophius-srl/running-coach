@@ -7,6 +7,7 @@ import { loadRunsAndPayloads } from "./goals/fitness";
 import { goalRoutes } from "./goals/routes";
 import { heartRateRoutes, loadHeartRate } from "./heart-rate/routes";
 import { historyRoutes } from "./history/routes";
+import { fitImportRoutes } from "./imports/routes";
 import { personalTokenRoutes } from "./personal-token/routes";
 import { planRoutes } from "./plans/routes";
 import { progressionRoutes } from "./progression/routes";
@@ -19,8 +20,10 @@ export type { Bindings } from "./env";
 
 // Routes /api/* accessibles sans session : tout /api/auth/ (OAuth, logout) et le webhook
 // Strava, en chemin exact pour ne pas exposer /api/strava/webhook-admin, /api/strava/webhooks…
+// L'import FIT s'authentifie lui-même (session ou jeton personnel, ADR 0005) : seule route que le
+// jeton ouvre.
 const PUBLIC_API_PREFIX = "/api/auth/";
-const PUBLIC_API_PATHS = ["/api/strava/webhook"];
+const PUBLIC_API_PATHS = ["/api/strava/webhook", "/api/imports/fit"];
 
 function isPublicApiPath(path: string): boolean {
   return path.startsWith(PUBLIC_API_PREFIX) || PUBLIC_API_PATHS.includes(path);
@@ -42,6 +45,7 @@ app.route("/api/auth", authRoutes);
 app.route("/api/goal", goalRoutes);
 app.route("/api/heart-rate-zones", heartRateRoutes);
 app.route("/api/history", historyRoutes);
+app.route("/api/imports", fitImportRoutes);
 app.route("/api/personal-token", personalTokenRoutes);
 app.route("/api/plan", planRoutes);
 app.route("/api/progression", progressionRoutes);
