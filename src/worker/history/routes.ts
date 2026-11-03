@@ -23,6 +23,8 @@ const COUNT_EXISTING = `
   SELECT COUNT(*) AS n FROM imported_activities
   WHERE user_id = ? AND id IN (SELECT json_extract(value, '$.id') FROM json_each(?))`;
 
+// imported_at est remis à l'heure du réimport : l'onglet Progression juge la fraîcheur de
+// l'historique sur la date du dernier import (#61).
 // « WHERE true » lève l'ambiguïté de SQLite entre INSERT … SELECT et la clause ON CONFLICT.
 const UPSERT_RUNS = `
   INSERT INTO imported_activities (user_id, id, start_date, sport_type, name, distance_m,
@@ -39,7 +41,8 @@ const UPSERT_RUNS = `
     distance_m = excluded.distance_m,
     moving_time_s = excluded.moving_time_s,
     elevation_gain_m = excluded.elevation_gain_m,
-    average_heartrate = excluded.average_heartrate`;
+    average_heartrate = excluded.average_heartrate,
+    imported_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
 
 function parseRows(text: string): unknown[] | null {
   try {

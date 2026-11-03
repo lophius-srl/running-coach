@@ -3,6 +3,7 @@ import { AppNav } from "./AppNav";
 import { GoalView } from "./GoalView";
 import { HistoryImport } from "./HistoryImport";
 import { Layout } from "./Layout";
+import { ProgressionView } from "./ProgressionView";
 import { APP_NAME, documentTitle, routeFor } from "./routes";
 import { ConnectWithStrava, Loading } from "./ui";
 import { useGoal } from "./useGoal";
@@ -25,7 +26,7 @@ async function fetchSession(): Promise<Session> {
 
 type ConnectedProps = { athleteId: number; onLogout: () => void };
 
-// App connectée : quatre vues, une URL chacune (voir routes.ts). Démontée à la déconnexion,
+// App connectée : cinq vues, une URL chacune (voir routes.ts). Démontée à la déconnexion,
 // ce qui remet tout son état à zéro.
 function ConnectedApp({ athleteId, onLogout }: ConnectedProps) {
   const view = useRoute();
@@ -81,6 +82,7 @@ function ConnectedApp({ athleteId, onLogout }: ConnectedProps) {
           onSaved={goal.replace}
         />
       )}
+      {view === "progression" && <ProgressionView />}
       {view === "history" && <HistoryImport />}
     </Layout>
   );

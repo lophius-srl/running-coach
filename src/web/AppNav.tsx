@@ -28,7 +28,8 @@ export function RouteLink({ view, className, current, children }: LinkProps) {
   );
 }
 
-// Pictogrammes décoratifs (24 × 24, trait) : calendrier, liste de séances, cible, histogramme.
+// Pictogrammes décoratifs (24 × 24, trait) : calendrier, liste de séances, cible, courbe,
+// histogramme.
 const ICONS: Record<ViewId, ReactNode> = {
   week: (
     <>
@@ -49,6 +50,7 @@ const ICONS: Record<ViewId, ReactNode> = {
       <circle cx="12" cy="12" r="1" />
     </>
   ),
+  progression: <path d="M3 20h18M4 16l5-5 4 3 7-8" />,
   history: <path d="M4 20h16M7 16v-5M12 16V6M17 16v-8" />,
 };
 

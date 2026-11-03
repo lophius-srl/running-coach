@@ -12,6 +12,7 @@ describe("viewForPath", () => {
     ["/", "week"],
     ["/plan", "plan"],
     ["/objectif", "goal"],
+    ["/progression", "progression"],
     ["/historique", "history"],
   ] as const)("associe %s à la vue %s", (path, view) => {
     expect(viewForPath(path)).toBe(view);
@@ -21,6 +22,7 @@ describe("viewForPath", () => {
     expect(viewForPath("/objectif/")).toBe("goal");
     expect(viewForPath("/Historique//")).toBe("history");
     expect(viewForPath("/Plan/")).toBe("plan");
+    expect(viewForPath("/Progression/")).toBe("progression");
   });
 
   it("renvoie Ma semaine pour un chemin inconnu ou vide", () => {
@@ -41,11 +43,12 @@ describe("viewForPath", () => {
 });
 
 describe("ROUTES", () => {
-  it("propose quatre onglets, Mon plan juste après Ma semaine", () => {
+  it("propose cinq onglets, Mon plan juste après Ma semaine", () => {
     expect(ROUTES.map(({ view, path }) => [view, path])).toEqual([
       ["week", "/"],
       ["plan", "/plan"],
       ["goal", "/objectif"],
+      ["progression", "/progression"],
       ["history", "/historique"],
     ]);
   });
@@ -58,6 +61,9 @@ describe("ROUTES", () => {
 
   it("raccourcit le libellé d'onglet trop long pour la barre du bas", () => {
     expect(routeFor("goal").shortLabel).toBe("Objectif");
+    expect(routeFor("progression").shortLabel).toBe("Progrès");
+    expect(routeFor("history").shortLabel).toBe("Import");
+    expect(routeFor("week").shortLabel).toBe("Semaine");
     for (const { label, shortLabel } of ROUTES) {
       if (shortLabel) expect(shortLabel.length).toBeLessThan(label.length);
     }
@@ -75,6 +81,7 @@ describe("documentTitle", () => {
   it("préfixe le nom de l'app par le titre de la vue", () => {
     expect(documentTitle("goal")).toBe("Objectif & allures · Running Coach");
     expect(documentTitle("plan")).toBe("Mon plan · Running Coach");
+    expect(documentTitle("progression")).toBe("Progression · Running Coach");
   });
 });
 
