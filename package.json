@@ -19,7 +19,7 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "hono": "4.13.14",
+    "hono": "4.13.16",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
